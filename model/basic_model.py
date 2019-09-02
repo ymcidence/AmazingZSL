@@ -20,6 +20,14 @@ class BasicModel(object):
         pass
 
     def save(self, task_name, step, var_list=None):
-        save_name = os.path.join('./result', self.set_name, 'model', task_name, 'ymmodel')
+        save_path = os.path.join('./result', self.set_name, 'model')
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        save_name = os.path.join(save_path, task_name, 'ymmodel')
         saver = tf.train.Saver(var_list=var_list)
         saver.save(self.sess, save_name, step)
+
+    def restore(self, save_path, var_list=None):
+        saver = tf.train.Saver(var_list=var_list)
+        saver.restore(self.sess,save_path=save_path)

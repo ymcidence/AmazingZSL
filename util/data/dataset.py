@@ -76,7 +76,7 @@ class ZSLRecord(object):
         return self.data.make_one_shot_iterator()
 
     @property
-    def handel(self):
+    def handle(self):
         return self.sess.run(self.iterator.string_handle())
 
     @property
@@ -125,15 +125,15 @@ class Dataset(object):
 
     @property
     def training_handle(self):
-        return self.training_data.handel
+        return self.training_data.handle
 
     @property
     def seen_handle(self):
-        return self.seen_data.handel
+        return self.seen_data.handle
 
     @property
     def unseen_handle(self):
-        return self.unseen_data.handel
+        return self.unseen_data.handle
 
 
 # noinspection PyUnusedLocal
