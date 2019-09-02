@@ -33,9 +33,11 @@ class BasicModel(object):
 
     def _build_net(self):
         self._get_feat()
-        # 1. v->s
+
         with tf.variable_scope('actor') as scope:
+            # 1. v->s
             self.pred_s, self.det_1 = inn.invertible_projection('inv_1', self.feat, 0)
+            # 2. s->v
             scope.reuse_variables()
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn.invertible_projection('inv_1', connected_emb, 0, forward=False)
