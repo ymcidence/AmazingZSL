@@ -7,3 +7,6 @@ xgrad = tf.gradients(z, x)
 sess.run(tf.initialize_all_variables())
 print(sess.run(xgrad))
 print(x.shape)
+
+
+
