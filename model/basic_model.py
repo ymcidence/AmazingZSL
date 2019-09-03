@@ -86,7 +86,7 @@ class BasicModel(object):
             cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
             mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
 
-            loss_v = cls_loss
+            loss_v = tf.reduce_mean(cls_loss)
 
             loss_z = self.lamb * mmd_loss_z - self.det_1
 
@@ -128,7 +128,7 @@ class BasicModel(object):
             self._restore(restore_file, restore_list)
 
         if not os.path.exists(save_path):
-            os.mkdir(save_path)
+            os.makedirs(save_path)
 
         writer = tf.summary.FileWriter(summary_path, graph=self.sess.graph)
         summary = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES))

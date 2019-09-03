@@ -25,6 +25,7 @@ def distance(tensor_a: tf.Tensor, tensor_b: tf.Tensor):
     return distances
 
 
+# noinspection PyUnusedLocal
 def basic_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, kernel='IMQ', scale=SCALE):
     """
 
@@ -38,9 +39,9 @@ def basic_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, kernel='IMQ', scale=SCAL
     dist_2 = distance(tensor_b, tensor_b)
     dist_3 = distance(tensor_a, tensor_b)
 
-    batch_size = tf.shape(tensor_a)[0]
+    batch_size = tf.cast(tf.shape(tensor_a)[0], dtype=tf.float32)
     s = tensor_a.shape.as_list()[1]
-    c = 2 * s * scale
+    c = 20
 
     if kernel == 'IMQ':
         kernelized_1 = c / (c + dist_1)

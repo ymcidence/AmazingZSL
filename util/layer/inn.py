@@ -13,8 +13,8 @@ def invertible_projection(name, tensor_in: tf.Tensor, log_det, forward=True, reu
     :return:
     """
     with tf.variable_scope(name, reuse=reuse):
-        channel_num = tensor_in.shape.as_list()
-        w_init = np.linalg.qr(np.random.randn(channel_num, channel_num))[0]
+        channel_num = tensor_in.shape.as_list()[1]
+        w_init = np.linalg.qr(np.random.randn(channel_num, channel_num))[0].astype(np.float32)
         w = tf.get_variable("weights", initializer=w_init)
         this_log_det = tf.log(abs(tf.matrix_determinant(w)))
 
