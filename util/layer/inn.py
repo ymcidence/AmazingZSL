@@ -3,6 +3,15 @@ import numpy as np
 
 
 def invertible_projection(name, tensor_in: tf.Tensor, log_det, forward=True, reuse=None):
+    """
+    Invertible fully-connected layer
+    :param name:
+    :param tensor_in:
+    :param log_det:
+    :param forward:
+    :param reuse:
+    :return:
+    """
     with tf.variable_scope(name, reuse=reuse):
         channel_num = tensor_in.shape.as_list()
         w_init = np.linalg.qr(np.random.randn(channel_num, channel_num))[0]

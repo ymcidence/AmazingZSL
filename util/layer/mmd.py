@@ -25,6 +25,38 @@ def distance(tensor_a: tf.Tensor, tensor_b: tf.Tensor):
     return distances
 
 
+def basic_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, kernel='IMQ', scale=SCALE):
+    """
+
+        :param tensor_a: [N D] features of some data
+        :param tensor_b: [M D] features of some other data
+        :param kernel: only 'IMQ' supported
+        :param scale: kernel hyper-parameter
+        :return:
+    """
+    dist_1 = distance(tensor_a, tensor_a)
+    dist_2 = distance(tensor_b, tensor_b)
+    dist_3 = distance(tensor_a, tensor_b)
+
+    batch_size = tf.shape(tensor_a)[0]
+    s = tensor_a.shape.as_list()[1]
+    c = 2 * s * scale
+
+    if kernel == 'IMQ':
+        kernelized_1 = c / (c + dist_1)
+        kernelized_1 = tf.reduce_sum(kernelized_1) / (batch_size * (batch_size - 1))
+
+        kernelized_2 = c / (c + dist_2)
+        kernelized_2 = tf.reduce_sum(kernelized_2) / (batch_size * (batch_size - 1))
+
+        kernelized_3 = c / (c + dist_3)
+        kernelized_3 = 2 * tf.reduce_sum(kernelized_3) / (batch_size * batch_size)
+
+        return kernelized_1 + kernelized_2 - kernelized_3
+    else:
+        raise Exception("I haven't considered other kernels!")
+
+
 def category_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, label_a: tf.Tensor, label_b: tf.Tensor, kernel='RBF',
                  scale=SCALE):
     """

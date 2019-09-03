@@ -5,10 +5,12 @@ from util.data import set_profiles
 from util.layer import inn
 from util.layer import mmd
 from util.layer import conventional_layers as layers
+from util.eval import zsl_acc
+from time import gmtime, strftime
 
 
 def semantic_cls(tensor_in: tf.Tensor, cls_emb: tf.Tensor, label: tf.Tensor, temp=.5):
-    distances = mmd.distance(tensor_in, tf.stop_gradient(cls_emb)) / temp
+    distances = -1 * mmd.distance(tensor_in, tf.stop_gradient(cls_emb)) / temp
     return tf.nn.softmax_cross_entropy_with_logits(labels=label, logits=distances)
 
 
@@ -34,11 +36,14 @@ class BasicModel(object):
         self.set_name = kwargs.get('set_name', 'AWA1')
         self.gan = kwargs.get('gan', True)
         self.soft_max_temp = kwargs.get('temp', .5)
+        self.lamb = kwargs.get('lamb', 10)
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
         self.batch_size = kwargs.get('batch_size', 256)
         self.data = Dataset(set_name=self.set_name, batch_size=self.batch_size, sess=self.sess)
+        self.global_step = tf.Variable(0, trainable=False, name='global_step')
+        self._build_net()
 
     def _get_feat(self):
         self.feat = tf.identity(self.data.feed['feat'])
@@ -77,19 +82,85 @@ class BasicModel(object):
                 self.d_fake = tf.sigmoid(layers.fc_layer('fc_1', self.pred_v, 1))
 
     def _build_loss_no_gan(self):
-        with tf.name_scope('actor'):
+        with tf.name_scope('forward'):
             cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
-            mmd_loss_z = mmd
+            mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
 
-        loss = cls_loss
+            loss_v = cls_loss
+
+            loss_z = self.lamb * mmd_loss_z - self.det_1
+
+            tf.summary.scalar('loss_v', loss_v)
+            tf.summary.scalar('loss_z', loss_z)
+            tf.summary.scalar('mmd_loss_z', mmd_loss_z)
+            tf.summary.scalar('det_1', self.det_1)
+
+        with tf.name_scope('reverse'):
+            mmd_loss_x = mmd.basic_mmd(self.pred_v, self.feat)
+
+            loss_x = self.lamb * mmd_loss_x - self.det_2
+
+            tf.summary.scalar('loss_x', loss_x)
+            tf.summary.scalar('mmd_loss_x', mmd_loss_x)
+            tf.summary.scalar('det_2', self.det_2)
+
+        loss = loss_v + loss_z + loss_x
 
         return loss
+
+    def _build_opt_no_gan(self):
+        self.loss = self._build_loss_no_gan()
+        adam = tf.train.AdamOptimizer()
+        return adam.minimize(self.loss, self.global_step)
 
     def _build_loss_gan(self):
         pass
 
-    def train(self):
-        pass
+    def train(self, restore_file=None, restore_list=None, task='hehe1', max_iter=500000):
+        opt = self._build_opt_no_gan()
+        init_op = tf.global_variables_initializer()
+        self.sess.run(init_op)
+        time_string = strftime("%a%d%b%Y-%H%M%S", gmtime())
+        summary_path = os.path.join('./result', self.set_name, 'log', task + '_' + time_string) + os.sep
+        save_path = os.path.join('./result', self.set_name, task + '_' + 'model') + os.sep
+
+        if restore_file is not None:
+            self._restore(restore_file, restore_list)
+
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+
+        writer = tf.summary.FileWriter(summary_path, graph=self.sess.graph)
+        summary = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES))
+        for i in range(max_iter):
+            feed_dict = {self.data.train_test_handle: self.data.training_handle}
+            s_value, label_value, emb_value, loss_value, _, summary_value, step_value = self.sess.run(
+                [self.pred_s_1, self.label,
+                 self.label_emb, self.loss, opt, summary,
+                 self.global_step],
+                feed_dict=feed_dict)
+            if (i + 1) % 10 == 0:
+                writer.add_summary(summary_value, step_value)
+                seen_dict = {self.data.train_test_handle: self.data.seen_handle}
+                unseen_dict = {self.data.train_test_handle: self.data.unseen_handle}
+
+                seen_s, seen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=seen_dict)
+                unseen_s, unseen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=unseen_dict)
+
+                train_acc = zsl_acc.cls_wise_acc(s_value, label_value, emb_value)
+                seen_acc = zsl_acc.cls_wise_acc(seen_s, seen_label, emb_value)
+                unseen_acc = zsl_acc.cls_wise_acc(unseen_s, unseen_label, emb_value)
+                h_score = zsl_acc.h_score(seen_acc, unseen_acc)
+
+                hook_summary = tf.Summary(value=[tf.Summary.Value(tag='hook/train_acc', simple_value=train_acc)])
+                writer.add_summary(hook_summary, step_value)
+                hook_summary = tf.Summary(value=[tf.Summary.Value(tag='hook/seen_acc', simple_value=seen_acc)])
+                writer.add_summary(hook_summary, step_value)
+                hook_summary = tf.Summary(value=[tf.Summary.Value(tag='hook/unseen_acc', simple_value=unseen_acc)])
+                writer.add_summary(hook_summary, step_value)
+                hook_summary = tf.Summary(value=[tf.Summary.Value(tag='hook/h_score', simple_value=h_score)])
+                writer.add_summary(hook_summary, step_value)
+                print('Step {}, Loss {}'.format(step_value, loss_value))
 
     def save(self, task_name, step, var_list=None):
         save_path = os.path.join('./result', self.set_name, 'model')
@@ -100,6 +171,6 @@ class BasicModel(object):
         saver = tf.train.Saver(var_list=var_list)
         saver.save(self.sess, save_name, step)
 
-    def restore(self, save_path, var_list=None):
+    def _restore(self, save_path, var_list=None):
         saver = tf.train.Saver(var_list=var_list)
         saver.restore(self.sess, save_path=save_path)
