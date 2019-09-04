@@ -22,6 +22,7 @@ class SingleINN(object):
         return fc_2
 
     def _single_depth(self, name, tensor_in: tf.Tensor, det, forward=True):
+        feat_size = tensor_in.shape.as_list()[-1]
         with tf.variable_scope(name):
             if forward:
                 # 1. actnorm
@@ -37,7 +38,7 @@ class SingleINN(object):
 
                 # 3. coupling
                 x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
-                h = self._simple_nn('nn', x1, self.hidden_size)
+                h = self._simple_nn('nn', x1, self.hidden_size, feat_size)
                 shift = h[:, 0::2]
                 scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
                 x2 = (x2 + shift) * scale
@@ -47,7 +48,7 @@ class SingleINN(object):
             else:
                 # 3. coupling
                 x1, x2 = tf.split(tensor_in, num_or_size_splits=2, axis=1)
-                h = self._simple_nn('nn', x1, self.hidden_size)
+                h = self._simple_nn('nn', x1, self.hidden_size, feat_size)
                 shift = h[:, 0::2]
                 scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
                 x2 = x2 / scale - shift
@@ -80,16 +81,40 @@ class SingleINN(object):
         return self._single_level('level_1', tensor_in, det, forward=True)
 
 
-def test_inn():
+def test_inn_1():
     model = SingleINN('hehe', 2)
     a = tf.constant([[2., 1.], [3.5, 0.8]], dtype=tf.float32)
-    enc_a, _ = model(a, 0)
-    dec_a = model(enc_a, 0, forward=False)
+    with tf.variable_scope('hehe') as scope:
+        enc_a, _ = model(a, 0)
+        scope.reuse_variables()
+        dec_a = model(enc_a, 0, forward=False)
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-    sess.run(dec_a)
+    print(sess.run(dec_a))
     print('hehe')
 
 
+def test_inn_2():
+    model = SingleINN('hehe', 2, depth=2)
+    a = tf.constant([[2., 1.], [3.5, 0.8]], dtype=tf.float32)
+    with tf.variable_scope('hehe') as scope:
+        enc_a, det = model(a, 0)
+        scope.reuse_variables()
+        dec_a, _ = model(enc_a, 0, forward=False)
+
+    loss = tf.nn.l2_loss(enc_a) - tf.reduce_sum(tf.abs(det))
+    op = tf.train.GradientDescentOptimizer(.1)
+    opt = op.minimize(loss)
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+
+    for i in range(100):
+        hehe, _, dis, loss_value = sess.run([dec_a, opt, tf.nn.l2_loss(a - dec_a), loss])
+
+        print('Step {}, loss {}, dis {}'.format(i, loss_value, dis))
+        if i % 5 == 0:
+            print(hehe)
+
+
 if __name__ == '__main__':
-    test_inn()
+    test_inn_2()
