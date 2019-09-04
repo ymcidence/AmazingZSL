@@ -102,8 +102,8 @@ def test_inn_2():
         scope.reuse_variables()
         dec_a, _ = model(enc_a, 0, forward=False)
 
-    loss = tf.nn.l2_loss(enc_a) - tf.reduce_sum(tf.abs(det))
-    op = tf.train.GradientDescentOptimizer(.1)
+    loss = tf.nn.l2_loss(dec_a - a)
+    op = tf.train.GradientDescentOptimizer(.01)
     opt = op.minimize(loss)
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -117,4 +117,4 @@ def test_inn_2():
 
 
 if __name__ == '__main__':
-    test_inn_2()
+    test_inn_1()
