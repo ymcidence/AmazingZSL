@@ -2,7 +2,7 @@ import tensorflow as tf
 import os
 from util.data.dataset import Dataset
 from util.data import set_profiles
-from util.layer import inn
+from util.flow import inn_module
 from util.layer import mmd
 from util.layer import conventional_layers as layers
 from util.eval import zsl_acc
@@ -41,6 +41,7 @@ class BasicModel(object):
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
         self.batch_size = kwargs.get('batch_size', 256)
+        self.InnModule = kwargs.get('inn_module', inn_module.SimpleINN)
         self.data = Dataset(set_name=self.set_name, batch_size=self.batch_size, sess=self.sess)
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
         self._build_net()
@@ -64,16 +65,17 @@ class BasicModel(object):
 
     def _build_net(self):
         self._get_feat()
+        inn = self.InnModule('inn', int(self.feat_size / 2))
 
         with tf.variable_scope('actor') as scope:
             # 1. v->s
-            self.pred_s, self.det_1 = inn.invertible_projection('inv_1', self.feat, 0)
+            self.pred_s, self.det_1 = inn(self.feat, 0)
             self.pred_s_1 = self.pred_s[:, :self.emb_size]
             self.pred_s_2 = self.pred_s[:, self.emb_size:]
             # 2. s->v
             scope.reuse_variables()
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
-            self.pred_v, self.det_2 = inn.invertible_projection('inv_1', connected_emb, 0, forward=False)
+            self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
 
         if self.gan:
             with tf.variable_scope('critic') as scope:
@@ -88,21 +90,21 @@ class BasicModel(object):
 
             loss_v = tf.reduce_mean(cls_loss)
 
-            loss_z = self.lamb * mmd_loss_z - self.det_1
+            loss_z = self.lamb * mmd_loss_z  # - self.det_1
 
             tf.summary.scalar('loss_v', loss_v)
             tf.summary.scalar('loss_z', loss_z)
             tf.summary.scalar('mmd_loss_z', mmd_loss_z)
-            tf.summary.scalar('det_1', self.det_1)
+            # tf.summary.scalar('det_1', self.det_1)
 
         with tf.name_scope('reverse'):
             mmd_loss_x = mmd.basic_mmd(self.pred_v, self.feat)
 
-            loss_x = self.lamb * mmd_loss_x - self.det_2
+            loss_x = self.lamb * mmd_loss_x  # - self.det_2
 
             tf.summary.scalar('loss_x', loss_x)
-            tf.summary.scalar('mmd_loss_x', mmd_loss_x)
-            tf.summary.scalar('det_2', self.det_2)
+            # tf.summary.scalar('mmd_loss_x', mmd_loss_x)
+            # tf.summary.scalar('det_2', self.det_2)
 
         loss = loss_v + loss_z + loss_x
 

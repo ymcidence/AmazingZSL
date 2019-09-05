@@ -47,7 +47,8 @@ def default_initializer(std=0.05):
 def int_shape(x):
     if str(x.get_shape()[0]) != '?':
         return list(map(int, x.get_shape()))
-    return [-1]+list(map(int, x.get_shape()[1:]))
+    return [-1] + list(map(int, x.get_shape()[1:]))
+
 
 # wrapper tf.get_variable, augmented with 'init' functionality
 # Get variable with data dependent init
@@ -62,16 +63,18 @@ def get_variable_ddi(name, shape, initial_value, dtype=tf.float32, init=False, t
             return w
     return w
 
+
 # Activation normalization
 # Convenience function that does centering+scaling
 
 
 @add_arg_scope
-def actnorm(name, x, scale=1., logdet=None, logscale_factor=3., batch_variance=False, reverse=False, init=False, trainable=True):
+def actnorm(name, x, scale=1., logdet=None, logscale_factor=3., batch_variance=False, reverse=False, init=False,
+            trainable=True):
     if arg_scope([get_variable_ddi], trainable=trainable):
         if not reverse:
-            x = actnorm_center(name+"_center", x, reverse)
-            x = actnorm_scale(name+"_scale", x, scale, logdet,
+            x = actnorm_center(name + "_center", x, reverse)
+            x = actnorm_scale(name + "_scale", x, scale, logdet,
                               logscale_factor, batch_variance, reverse, init)
             if logdet != None:
                 x, logdet = x
@@ -80,10 +83,11 @@ def actnorm(name, x, scale=1., logdet=None, logscale_factor=3., batch_variance=F
                               logscale_factor, batch_variance, reverse, init)
             if logdet != None:
                 x, logdet = x
-            x = actnorm_center(name+"_center", x, reverse)
+            x = actnorm_center(name + "_center", x, reverse)
         if logdet != None:
             return x, logdet
         return x
+
 
 # Activation normalization
 
@@ -109,26 +113,28 @@ def actnorm_center(name, x, reverse=False):
 
         return x
 
+
 # Activation normalization
 
 
 @add_arg_scope
-def actnorm_scale(name, x, scale=1., logdet=None, logscale_factor=3., batch_variance=False, reverse=False, init=False, trainable=True):
+def actnorm_scale(name, x, scale=1., logdet=None, logscale_factor=3., batch_variance=False, reverse=False, init=False,
+                  trainable=True):
     shape = x.get_shape()
     with tf.variable_scope(name), arg_scope([get_variable_ddi], trainable=trainable):
         assert len(shape) == 2 or len(shape) == 4
         if len(shape) == 2:
-            x_var = tf.reduce_mean(x**2, [0], keepdims=True)
+            x_var = tf.reduce_mean(x ** 2, [0], keepdims=True)
             logdet_factor = 1
             _shape = (1, int_shape(x)[1])
 
         elif len(shape) == 4:
-            x_var = tf.reduce_mean(x**2, [0, 1, 2], keepdims=True)
-            logdet_factor = int(shape[1])*int(shape[2])
+            x_var = tf.reduce_mean(x ** 2, [0, 1, 2], keepdims=True)
+            logdet_factor = int(shape[1]) * int(shape[2])
             _shape = (1, 1, 1, int_shape(x)[3])
 
         if batch_variance:
-            x_var = tf.reduce_mean(x**2, keepdims=True)
+            x_var = tf.reduce_mean(x ** 2, keepdims=True)
 
         # if init and False:
         #     # MPI all-reduce
@@ -138,7 +144,7 @@ def actnorm_scale(name, x, scale=1., logdet=None, logscale_factor=3., batch_vari
 
         if True:
             logs = get_variable_ddi("logs", _shape, initial_value=tf.log(
-                scale/(tf.sqrt(x_var)+1e-6))/logscale_factor)*logscale_factor
+                scale / (tf.sqrt(x_var) + 1e-6)) / logscale_factor) * logscale_factor
             if not reverse:
                 x = x * tf.exp(logs)
             else:
@@ -146,7 +152,7 @@ def actnorm_scale(name, x, scale=1., logdet=None, logscale_factor=3., batch_vari
         else:
             # Alternative, doesn't seem to do significantly worse or better than the logarithmic version above
             s = get_variable_ddi("s", _shape, initial_value=scale /
-                                 (tf.sqrt(x_var) + 1e-6) / logscale_factor)*logscale_factor
+                                                            (tf.sqrt(x_var) + 1e-6) / logscale_factor) * logscale_factor
             logs = tf.log(tf.abs(s))
             if not reverse:
                 x *= s
@@ -160,6 +166,7 @@ def actnorm_scale(name, x, scale=1., logdet=None, logscale_factor=3., batch_vari
             return x, logdet + dlogdet
 
         return x
+
 
 # Linear layer with layer norm
 
@@ -180,6 +187,7 @@ def linear(name, x, width, do_weightnorm=True, do_actnorm=True, initializer=None
             x = actnorm("actnorm", x, scale)
         return x
 
+
 # Linear layer with zero init
 
 
@@ -195,6 +203,7 @@ def linear_zeros(name, x, width, logscale_factor=3):
         x *= tf.exp(tf.get_variable("logs",
                                     [1, width], initializer=tf.zeros_initializer()) * logscale_factor)
         return x
+
 
 # Slow way to add edge padding
 
@@ -232,7 +241,8 @@ def add_edge_padding(x, filter_size):
 
 
 @add_arg_scope
-def conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], pad="SAME", do_weightnorm=False, do_actnorm=True, context1d=None, skip=1, edge_bias=True):
+def conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], pad="SAME", do_weightnorm=False, do_actnorm=True,
+           context1d=None, skip=1, edge_bias=True):
     with tf.variable_scope(name):
         if edge_bias and pad == "SAME":
             x = add_edge_padding(x, filter_size)
@@ -271,8 +281,8 @@ def separable_conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], padding=
         strides = [1] + stride + [1]
         w1_shape = filter_size + [n_in, 1]
         w1_init = np.zeros(w1_shape, dtype='float32')
-        w1_init[(filter_size[0]-1)//2, (filter_size[1]-1)//2, :,
-                :] = 1.  # initialize depthwise conv as identity
+        w1_init[(filter_size[0] - 1) // 2, (filter_size[1] - 1) // 2, :,
+        :] = 1.  # initialize depthwise conv as identity
         w1 = tf.get_variable("W1", dtype=tf.float32, initializer=w1_init)
         w2_shape = [1, 1, n_in, width]
         w2 = tf.get_variable("W2", w2_shape, tf.float32,
@@ -289,7 +299,8 @@ def separable_conv2d(name, x, width, filter_size=[3, 3], stride=[1, 1], padding=
 
 
 @add_arg_scope
-def conv2d_zeros(name, x, width, filter_size=[3, 3], stride=[1, 1], pad="SAME", logscale_factor=3, skip=1, edge_bias=True):
+def conv2d_zeros(name, x, width, filter_size=[3, 3], stride=[1, 1], pad="SAME", logscale_factor=3, skip=1,
+                 edge_bias=True):
     with tf.variable_scope(name):
         if edge_bias and pad == "SAME":
             x = add_edge_padding(x, filter_size)
@@ -322,7 +333,7 @@ def upsample2d_nearest_neighbour(x):
     x = tf.reshape(x, (n_batch, height, 1, width, 1, n_channels))
     x = tf.concat(2, [x, x])
     x = tf.concat(4, [x, x])
-    x = tf.reshape(x, (n_batch, height*2, width*2, n_channels))
+    x = tf.reshape(x, (n_batch, height * 2, width * 2, n_channels))
     return x
 
 
@@ -343,11 +354,11 @@ def squeeze2d(x, factor=2):
     width = int(shape[2])
     n_channels = int(shape[3])
     assert height % factor == 0 and width % factor == 0
-    x = tf.reshape(x, [-1, height//factor, factor,
-                       width//factor, factor, n_channels])
+    x = tf.reshape(x, [-1, height // factor, factor,
+                       width // factor, factor, n_channels])
     x = tf.transpose(x, [0, 1, 3, 5, 2, 4])
-    x = tf.reshape(x, [-1, height//factor, width //
-                       factor, n_channels*factor*factor])
+    x = tf.reshape(x, [-1, height // factor, width //
+                       factor, n_channels * factor * factor])
     return x
 
 
@@ -361,17 +372,19 @@ def unsqueeze2d(x, factor=2):
     n_channels = int(shape[3])
     assert n_channels >= 4 and n_channels % 4 == 0
     x = tf.reshape(
-        x, (-1, height, width, int(n_channels/factor**2), factor, factor))
+        x, (-1, height, width, int(n_channels / factor ** 2), factor, factor))
     x = tf.transpose(x, [0, 1, 4, 2, 5, 3])
-    x = tf.reshape(x, (-1, int(height*factor),
-                       int(width*factor), int(n_channels/factor**2)))
+    x = tf.reshape(x, (-1, int(height * factor),
+                       int(width * factor), int(n_channels / factor ** 2)))
     return x
+
 
 # Reverse features across channel dimension
 
 
 def reverse_features(name, h, reverse=False):
     return h[:, :, :, ::-1]
+
 
 # Shuffle across the channel dimension
 
@@ -388,7 +401,7 @@ def shuffle_features(name, h, indices=None, return_indices=False, reverse=False)
             indices = list(range(n_channels))
             rng.shuffle(indices)
             # Reverse it
-            indices_inverse = [0]*n_channels
+            indices_inverse = [0] * n_channels
             for i in range(n_channels):
                 indices_inverse[indices[i]] = i
 
@@ -423,6 +436,7 @@ def embedding(name, y, n_y, width):
         embeddings = tf.gather(params, y)
         return embeddings
 
+
 # Random variables
 
 
@@ -442,13 +456,14 @@ def standard_gaussian(shape):
 def gaussian_diag(mean, logsd):
     class o(object):
         pass
+
     o.mean = mean
     o.logsd = logsd
     o.eps = tf.random_normal(tf.shape(mean))
     o.sample = mean + tf.exp(logsd) * o.eps
     o.sample2 = lambda eps: mean + tf.exp(logsd) * eps
     o.logps = lambda x: -0.5 * \
-        (np.log(2 * np.pi) + 2. * logsd + (x - mean) ** 2 / tf.exp(2. * logsd))
+                        (np.log(2 * np.pi) + 2. * logsd + (x - mean) ** 2 / tf.exp(2. * logsd))
     o.logp = lambda x: flatten_sum(o.logps(x))
     o.get_eps = lambda x: (x - mean) / tf.exp(logsd)
     return o
@@ -463,6 +478,7 @@ def gaussian_diag(mean, logsd):
 def discretized_logistic(mean, logscale, binsize=1. / 256):
     class o(object):
         pass
+
     o.mean = mean
     o.logscale = logscale
     scale = tf.exp(logscale)
@@ -470,6 +486,7 @@ def discretized_logistic(mean, logscale, binsize=1. / 256):
     def logps(x):
         x = (x - mean) / scale
         return tf.log(tf.sigmoid(x + binsize / scale) - tf.sigmoid(x) + 1e-7)
+
     o.logps = logps
     o.logp = lambda x: flatten_sum(logps(x))
     return o
@@ -496,3 +513,18 @@ def _symmetric_matrix_square_root(mat, eps=1e-10):
     # This is unlike Numpy which returns v = V^T
     return tf.matmul(
         tf.matmul(u, tf.diag(si)), v, transpose_b=True)
+
+
+def test_permutation():
+    a = tf.constant([[2., 1., 3], [3.5, 0.8, 6]], dtype=tf.float32)
+    with tf.variable_scope('hehe') as scope:
+        b = shuffle_features('shuffle', a)
+        scope.reuse_variables()
+        a_ = shuffle_features('shuffle', b, reverse=True)
+
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    print(sess.run([b, a_]))
+
+if __name__ == '__main__':
+    test_permutation()
