@@ -20,14 +20,22 @@ def partial_semantic_cls(tensor_in: tf.Tensor, cls_emb: tf.Tensor, label: tf.Ten
     :param tensor_in: [N D]
     :param cls_emb: [C M]
     :param label: [N C] one-hot
-    :param part_entry: [C_]
+    :param part_entry: [C_s]
     :param temp: temperature
     :return:
     """
-    cls_emb = tf.gather(cls_emb, indices=part_entry, axis=0)  # [C_ M]
-    label = tf.gather(label, indices=part_entry, axis=1)  # [N C_]
+    cls_emb = tf.gather(cls_emb, indices=part_entry, axis=0)  # [C_s M]
+    label = tf.gather(label, indices=part_entry, axis=1)  # [N C_s]
 
     return semantic_cls(tensor_in, cls_emb, label, temp)
+
+
+def calibration_loss(tensor_in: tf.Tensor, cls_emb: tf.Tensor, part_entry, temp=.5):
+    unseen_cls_emb = tf.gather(cls_emb, indices=part_entry, axis=0)  # [C_u M]
+    distances = -1 * mmd.distance(tensor_in, unseen_cls_emb) / temp
+    prob = tf.nn.softmax(distances + 1e-8)
+    ent = - prob * tf.log(prob + 1e-8)
+    return tf.reduce_mean(ent)
 
 
 class BasicModel(object):
@@ -41,7 +49,7 @@ class BasicModel(object):
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
         self.batch_size = kwargs.get('batch_size', 256)
-        self.InnModule = kwargs.get('inn_module', inn_module.SimplerINN)
+        self.InnModule = kwargs.get('inn_module', inn_module.SimpleINN)
         self.data = Dataset(set_name=self.set_name, batch_size=self.batch_size, sess=self.sess)
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
         self._build_net()
@@ -86,17 +94,18 @@ class BasicModel(object):
     def _build_loss_no_gan(self):
         with tf.name_scope('forward'):
             cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
-            # mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
-            mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
+            cal_loss = calibration_loss(self.pred_s_1, self.cls_emb, self.u_cls, self.soft_max_temp)
+            mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
+            # mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
 
-            loss_v = tf.reduce_mean(cls_loss)
+            loss_v = tf.reduce_mean(cls_loss) + .5 * cal_loss
 
             loss_z = self.lamb * mmd_loss_z  # - self.det_1
 
             tf.summary.scalar('loss_v', loss_v)
             tf.summary.scalar('loss_z', loss_z)
             tf.summary.scalar('mmd_loss_z', mmd_loss_z)
-            # tf.summary.scalar('det_1', self.det_1)
+            tf.summary.scalar('cal_loss', cal_loss)
 
         with tf.name_scope('reverse'):
             mmd_loss_x = mmd.basic_mmd(self.pred_v, self.feat)
@@ -107,7 +116,7 @@ class BasicModel(object):
             # tf.summary.scalar('mmd_loss_x', mmd_loss_x)
             # tf.summary.scalar('det_2', self.det_2)
 
-        loss = loss_v  # + loss_z + loss_x
+        loss = loss_v + loss_z + loss_x
 
         return loss
 
@@ -139,7 +148,7 @@ class BasicModel(object):
             feed_dict = {self.data.train_test_handle: self.data.training_handle}
             s_value, label_value, emb_value, loss_value, _, summary_value, step_value = self.sess.run(
                 [self.pred_s_1, self.label,
-                 self.label_emb, self.loss, opt, summary,
+                 self.cls_emb, self.loss, opt, summary,
                  self.global_step],
                 feed_dict=feed_dict)
             writer.add_summary(summary_value, step_value)

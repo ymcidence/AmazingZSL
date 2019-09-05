@@ -14,8 +14,7 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
     distances = euclidean_distances(img_feat, emb)
     prediction = np.argmin(distances, axis=1)
     gt = np.argmax(label, axis=1)
-    acc = 0
-    acc_num = 0
+    acc = []
     for i in range(cls_num):
         ind = np.where(gt == i)[0]
 
@@ -25,11 +24,36 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
         correct_num = np.where(cls_pred == i)[0].shape[0]
         cls_acc = correct_num / ind.shape[0]
 
-        acc_num += 1
-        acc += cls_acc
-
-    return acc / acc_num
+        acc.append(cls_acc)
+    acc = np.asarray(acc)
+    return np.sum(acc)/acc.shape[0]
 
 
 def h_score(seen_acc, unseen_acc):
     return 2 * seen_acc * unseen_acc / (seen_acc + unseen_acc + 1e-7)
+
+
+def test():
+    a = [[1.5, 1.5, 1.4],
+         [1.1, 1.2, 1.2],
+         [2.1, 2.5, 2.1],
+         [2.1, 2.5, 2.1],
+         [3.1, 3.5, 3.1],
+         [3.3, 2.9, 3.1],
+         [3.3, 2.9, 3.1],
+         [3.3, 2.9, 3.1],
+         [3.3, 2.9, 3.1]]
+    a = np.asarray(a)
+    b = [[1, 1, 1.],
+         [2, 2, 2],
+         [3, 3, 3]]
+    b = np.asarray(b)
+    label = [0, 0, 1, 1, 1, 2, 2, 2, 2]
+    label = np.asarray(label)
+    label = np.eye(3)[label]
+    acc = cls_wise_acc(a, label, b)
+    print(acc)
+
+
+if __name__ == '__main__':
+    test()

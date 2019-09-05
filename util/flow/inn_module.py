@@ -68,7 +68,6 @@ def invertible_projection(name, z, logdet, forward=True):
             return z, logdet
 
 
-
 def simple_nn(name, tensor_in: tf.Tensor, middle_dim, output_dim=None):
     output_dim = output_dim or tensor_in.shape.as_list()[-1]
     with tf.variable_scope(name):
@@ -82,7 +81,7 @@ def reverse_features(name, h, reverse=False):
 
 
 class SimpleINN(object):
-    def __init__(self, name, hidden_size=1024, level=1, depth=1, permute=1, nn=simple_nn):
+    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn):
         self.name = name
         self.hidden_size = hidden_size
         self.level = level or 1
