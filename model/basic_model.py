@@ -36,7 +36,7 @@ class BasicModel(object):
         self.set_name = kwargs.get('set_name', 'AWA1')
         self.gan = kwargs.get('gan', True)
         self.soft_max_temp = kwargs.get('temp', .5)
-        self.lamb = kwargs.get('lamb', 10)
+        self.lamb = kwargs.get('lamb', 3)
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
