@@ -41,7 +41,7 @@ class BasicModel(object):
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
         self.batch_size = kwargs.get('batch_size', 256)
-        self.InnModule = kwargs.get('inn_module', inn_module.SimpleINN)
+        self.InnModule = kwargs.get('inn_module', inn_module.SimplerINN)
         self.data = Dataset(set_name=self.set_name, batch_size=self.batch_size, sess=self.sess)
         self.global_step = tf.Variable(0, trainable=False, name='global_step')
         self._build_net()
@@ -86,7 +86,8 @@ class BasicModel(object):
     def _build_loss_no_gan(self):
         with tf.name_scope('forward'):
             cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
-            mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
+            # mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
+            mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
 
             loss_v = tf.reduce_mean(cls_loss)
 
@@ -106,7 +107,7 @@ class BasicModel(object):
             # tf.summary.scalar('mmd_loss_x', mmd_loss_x)
             # tf.summary.scalar('det_2', self.det_2)
 
-        loss = loss_v + loss_z + loss_x
+        loss = loss_v  # + loss_z + loss_x
 
         return loss
 
@@ -141,8 +142,8 @@ class BasicModel(object):
                  self.label_emb, self.loss, opt, summary,
                  self.global_step],
                 feed_dict=feed_dict)
-            if (i + 1) % 10 == 0:
-                writer.add_summary(summary_value, step_value)
+            writer.add_summary(summary_value, step_value)
+            if (i + 1) % 50 == 0:
                 seen_dict = {self.data.train_test_handle: self.data.seen_handle}
                 unseen_dict = {self.data.train_test_handle: self.data.unseen_handle}
 

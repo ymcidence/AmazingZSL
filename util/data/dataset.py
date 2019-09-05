@@ -8,8 +8,8 @@ class ZSLMeta(object):
     def __init__(self, **kwargs):
         self.set_name = kwargs.get('set_name', 'AWA1')
         self.meta_name = os.path.join('./data', self.set_name, 'meta_info.npy')
-
         self.data = self._load_data()
+        self._iterator = self.data.make_one_shot_iterator()
 
     def _load_data(self):
         np_data = np.load(self.meta_name).item()
@@ -23,7 +23,7 @@ class ZSLMeta(object):
 
     @property
     def iterator(self):
-        return self.data.make_one_shot_iterator()
+        return self._iterator
 
 
 class ZSLRecord(object):
@@ -35,6 +35,10 @@ class ZSLRecord(object):
         self.set_size = set_profiles.SET_SIZE[self.set_name][set_profiles.PART_NAME.index(self.part_name)]
         self.meta_data = kwargs.get('meta_data', ZSLMeta(set_name=self.set_name))
         self.data = self._load_data()
+        self._iterator = self.data.make_one_shot_iterator()
+        self._handle = self.sess.run(self.iterator.string_handle())
+        self._output_types = self.data.output_types
+        self._output_shapes = self.data.output_shapes
 
     def _load_data(self):
         set_name = self.set_name
@@ -73,19 +77,19 @@ class ZSLRecord(object):
 
     @property
     def iterator(self):
-        return self.data.make_one_shot_iterator()
+        return self._iterator
 
     @property
     def handle(self):
-        return self.sess.run(self.iterator.string_handle())
+        return self._handle
 
     @property
     def output_types(self):
-        return self.data.output_types
+        return self._output_types
 
     @property
     def output_shapes(self):
-        return self.data.output_shapes
+        return self._output_shapes
 
 
 class Dataset(object):

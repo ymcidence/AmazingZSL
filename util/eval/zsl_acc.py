@@ -32,4 +32,4 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
 
 
 def h_score(seen_acc, unseen_acc):
-    return 2 * seen_acc * unseen_acc / (seen_acc + unseen_acc)
+    return 2 * seen_acc * unseen_acc / (seen_acc + unseen_acc + 1e-7)
