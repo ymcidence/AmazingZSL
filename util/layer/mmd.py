@@ -41,7 +41,7 @@ def basic_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, kernel='IMQ', scale=SCAL
 
     batch_size = tf.cast(tf.shape(tensor_a)[0], dtype=tf.float32)
     s = tensor_a.shape.as_list()[1]
-    c = 20
+    c = 2 * s * scale
 
     if kernel == 'IMQ':
         kernelized_1 = c / (c + dist_1)

@@ -121,7 +121,7 @@ class SimpleINN(object):
                 x1, x2 = tf.split(tensor_in, num_or_size_splits=2, axis=1)
                 h = self.nn('nn', x1, self.hidden_size, feat_size)
                 shift = h[:, 0::2]
-                scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
+                scale = tf.nn.sigmoid(h[:, 1::2] + 2.) + 1e-8
                 x2 = x2 / scale - shift
 
                 det = det - tf.reduce_sum(tf.log(scale), axis=1)

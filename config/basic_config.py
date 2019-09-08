@@ -9,8 +9,10 @@ awa_1 = {'sess': SESS,
          'batch_size': 512,
          'set_name': 'AWA1',
          'gan': False,
-         'task_name': 'l_3_cal',
-         'max_iter': 50000}
+         'task_name': 'bicls',
+         'max_iter': 50000,
+         'temp': .5,
+         'lamb': 10}
 
 SETTINGS = {
     'awa_1': awa_1

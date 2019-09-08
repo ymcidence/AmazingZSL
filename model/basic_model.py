@@ -80,10 +80,13 @@ class BasicModel(object):
             self.pred_s, self.det_1 = inn(self.feat, 0)
             self.pred_s_1 = self.pred_s[:, :self.emb_size]
             self.pred_s_2 = self.pred_s[:, self.emb_size:]
-            # 2. s->v
+            # 2. s->v'
             scope.reuse_variables()
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
+            # 3. v'->s'
+            self.pred_ss, _ = inn(self.pred_v, 0)
+            self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
 
         if self.gan:
             with tf.variable_scope('critic') as scope:
@@ -110,11 +113,15 @@ class BasicModel(object):
         with tf.name_scope('reverse'):
             mmd_loss_x = mmd.basic_mmd(self.pred_v, self.feat)
 
-            loss_x = self.lamb * mmd_loss_x  # - self.det_2
+            loss_px = self.lamb * mmd_loss_x  # - self.det_2
 
-            tf.summary.scalar('loss_x', loss_x)
             # tf.summary.scalar('mmd_loss_x', mmd_loss_x)
             # tf.summary.scalar('det_2', self.det_2)
+            cls_loss_2 = tf.reduce_mean(
+                semantic_cls(self.pred_ss_1, self.cls_emb, self.random_label, self.soft_max_temp))
+            loss_x = loss_px + cls_loss_2
+            tf.summary.scalar('loss_px', loss_px)
+            tf.summary.scalar('cls_loss_2', cls_loss_2)
 
         loss = loss_v + loss_z + loss_x
 
