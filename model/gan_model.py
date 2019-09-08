@@ -24,6 +24,9 @@ class SimpleGanModel(BasicModel):
             self.pred_ss, _ = inn(tf.stop_gradient(self.pred_v), 0)
             self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
 
+            ve = tf.concat([self.cls_emb, self.zero_padding], 1)
+            self.pred_ve, _ = inn(ve, 0, forward=False)
+
         with tf.variable_scope('critic') as scope:
             self.d_v_real = tf.sigmoid(layers.fc_layer('fc_v', self.feat, 1))
             self.d_s_real = tf.sigmoid(layers.fc_layer('fc_s', connected_emb, 1))
@@ -91,12 +94,14 @@ class SimpleGanModel(BasicModel):
         a_summary = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES, scope='actor'))
         c_summary = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES, scope='critic'))
         for i in range(max_iter):
+            s_f = self.pred_s_1 if self.cls_from == 's' else self.feat
+            s_e = self.cls_emb if self.cls_from == 's' else self.pred_ve
             # 1. train
             feed_dict = {self.data.train_test_handle: self.data.training_handle}
-            # 1.1 actor
+
             s_value, label_value, emb_value, a_loss_value, c_loss_value, _, a_summary_value, c_summary_value, step_value = self.sess.run(
-                [self.pred_s_1, self.label,
-                 self.cls_emb, self.actor_loss,
+                [s_f, self.label,
+                 s_e, self.actor_loss,
                  self.critic_loss, opt[1],
                  a_summary, c_summary,
                  self.global_step],
@@ -105,12 +110,13 @@ class SimpleGanModel(BasicModel):
             writer.add_summary(a_summary_value, step_value // 2)
             writer.add_summary(c_summary_value, step_value // 2)
 
+            # 2. test
             if (i + 1) % 50 == 0:
                 seen_dict = {self.data.train_test_handle: self.data.seen_handle}
                 unseen_dict = {self.data.train_test_handle: self.data.unseen_handle}
 
-                seen_s, seen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=seen_dict)
-                unseen_s, unseen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=unseen_dict)
+                seen_s, seen_label = self.sess.run([s_f, self.label], feed_dict=seen_dict)
+                unseen_s, unseen_label = self.sess.run([s_f, self.label], feed_dict=unseen_dict)
 
                 train_acc = zsl_acc.cls_wise_acc(s_value, label_value, emb_value)
                 seen_acc = zsl_acc.cls_wise_acc(seen_s, seen_label, emb_value)

@@ -45,6 +45,7 @@ class BasicModel(object):
         self.gan = kwargs.get('gan', True)
         self.soft_max_temp = kwargs.get('temp', .5)
         self.lamb = kwargs.get('lamb', 3)
+        self.cls_from = kwargs.get('cls_from', 's')
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
@@ -67,6 +68,7 @@ class BasicModel(object):
         comp_size = self.feat_size - self.emb_size
         self.z_random = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=.5)
         self.z_padding = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=.5)
+        self.zero_padding = tf.zeros([self.cls_num, comp_size], dtype=tf.float32)
         self.random_label = tf.one_hot(
             tf.random.uniform([self.batch_size], minval=0, maxval=self.cls_num - 1, dtype=tf.int32), depth=self.cls_num)
         self.random_emb = tf.stop_gradient(self.random_label @ self.cls_emb)
@@ -84,6 +86,8 @@ class BasicModel(object):
             scope.reuse_variables()
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
+            ve = tf.concat([self.cls_emb, self.zero_padding], 1)
+            self.pred_ve, _ = inn(ve, 0, forward=False)
             # 3. v'->s'
             self.pred_ss, _ = inn(tf.stop_gradient(self.pred_v), 0)
             self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
@@ -129,7 +133,7 @@ class BasicModel(object):
 
     def _build_opt(self):
         self.loss = self._build_loss()
-        adam = tf.train.AdamOptimizer()
+        adam = tf.train.RMSPropOptimizer(1e-3)
         return adam.minimize(self.loss, self.global_step)
 
     def train(self, restore_file=None, restore_list=None, task='hehe1', max_iter=500000):
@@ -150,9 +154,13 @@ class BasicModel(object):
         summary = tf.summary.merge(tf.get_collection(tf.GraphKeys.SUMMARIES))
         for i in range(max_iter):
             feed_dict = {self.data.train_test_handle: self.data.training_handle}
+
+            s_f = self.pred_s_1 if self.cls_from == 's' else self.feat
+            s_e = self.cls_emb if self.cls_from == 's' else self.pred_ve
+
             s_value, label_value, emb_value, loss_value, _, summary_value, step_value = self.sess.run(
-                [self.pred_s_1, self.label,
-                 self.cls_emb, self.loss, opt, summary,
+                [s_f, self.label,
+                 s_e, self.loss, opt, summary,
                  self.global_step],
                 feed_dict=feed_dict)
             writer.add_summary(summary_value, step_value)
@@ -160,8 +168,8 @@ class BasicModel(object):
                 seen_dict = {self.data.train_test_handle: self.data.seen_handle}
                 unseen_dict = {self.data.train_test_handle: self.data.unseen_handle}
 
-                seen_s, seen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=seen_dict)
-                unseen_s, unseen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=unseen_dict)
+                seen_s, seen_label = self.sess.run([s_f, self.label], feed_dict=seen_dict)
+                unseen_s, unseen_label = self.sess.run([s_f, self.label], feed_dict=unseen_dict)
 
                 train_acc = zsl_acc.cls_wise_acc(s_value, label_value, emb_value)
                 seen_acc = zsl_acc.cls_wise_acc(seen_s, seen_label, emb_value)
