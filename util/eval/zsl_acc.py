@@ -26,11 +26,12 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
 
         acc.append(cls_acc)
     acc = np.asarray(acc)
-    return np.sum(acc)/acc.shape[0]
+
+    return np.sum(acc) / acc.shape[0] if acc.shape[0] > 0 else 0
 
 
 def h_score(seen_acc, unseen_acc):
-    return 2 * seen_acc * unseen_acc / (seen_acc + unseen_acc + 1e-7)
+    return 2 * seen_acc * unseen_acc / (seen_acc + unseen_acc + 1e-8)
 
 
 def test():

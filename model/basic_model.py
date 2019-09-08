@@ -85,7 +85,7 @@ class BasicModel(object):
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
             # 3. v'->s'
-            self.pred_ss, _ = inn(self.pred_v, 0)
+            self.pred_ss, _ = inn(tf.stop_gradient(self.pred_v), 0)
             self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
 
         if self.gan:
@@ -94,12 +94,12 @@ class BasicModel(object):
                 scope.reuse_variables()
                 self.d_fake = tf.sigmoid(layers.fc_layer('fc_1', self.pred_v, 1))
 
-    def _build_loss_no_gan(self):
+    def _build_loss(self):
         with tf.name_scope('forward'):
             cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
             cal_loss = calibration_loss(self.pred_s_1, self.cls_emb, self.u_cls, self.soft_max_temp)
-            mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
-            # mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
+            # mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
+            mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
 
             loss_v = tf.reduce_mean(cls_loss) + .5 * cal_loss
 
@@ -127,16 +127,13 @@ class BasicModel(object):
 
         return loss
 
-    def _build_opt_no_gan(self):
-        self.loss = self._build_loss_no_gan()
+    def _build_opt(self):
+        self.loss = self._build_loss()
         adam = tf.train.AdamOptimizer()
         return adam.minimize(self.loss, self.global_step)
 
-    def _build_loss_gan(self):
-        pass
-
     def train(self, restore_file=None, restore_list=None, task='hehe1', max_iter=500000):
-        opt = self._build_opt_no_gan()
+        opt = self._build_opt()
         init_op = tf.global_variables_initializer()
         self.sess.run(init_op)
         time_string = strftime("%a%d%b%Y-%H%M%S", gmtime())
