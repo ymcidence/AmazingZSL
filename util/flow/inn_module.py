@@ -72,6 +72,7 @@ def simple_nn(name, tensor_in: tf.Tensor, middle_dim, output_dim=None):
     output_dim = output_dim or tensor_in.shape.as_list()[-1]
     with tf.variable_scope(name):
         fc_1 = layers.fc_layer('fc_1', tensor_in, middle_dim)
+        # fc_1 = layers.leaky_relu(fc_1)
         fc_2 = layers.fc_layer('fc_2', fc_1, output_dim)
     return fc_2
 

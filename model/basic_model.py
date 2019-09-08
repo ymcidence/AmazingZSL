@@ -46,6 +46,7 @@ class BasicModel(object):
         self.soft_max_temp = kwargs.get('temp', .5)
         self.lamb = kwargs.get('lamb', 3)
         self.cls_from = kwargs.get('cls_from', 's')
+        self.lr = kwargs.get('lr', 2e-4)
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
@@ -66,8 +67,8 @@ class BasicModel(object):
         self.feat_size = set_profiles.FEAT_DIM[self.set_name]
         self.emb_size = set_profiles.ATTR_DIM[self.set_name]
         comp_size = self.feat_size - self.emb_size
-        self.z_random = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=.5)
-        self.z_padding = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=.5)
+        self.z_random = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=1)
+        self.z_padding = tf.random_normal([self.batch_size, comp_size], mean=0., stddev=1)
         self.zero_padding = tf.zeros([self.cls_num, comp_size], dtype=tf.float32)
         self.random_label = tf.one_hot(
             tf.random.uniform([self.batch_size], minval=0, maxval=self.cls_num - 1, dtype=tf.int32), depth=self.cls_num)
@@ -133,7 +134,7 @@ class BasicModel(object):
 
     def _build_opt(self):
         self.loss = self._build_loss()
-        adam = tf.train.RMSPropOptimizer(1e-3)
+        adam = tf.train.AdamOptimizer(1e-3)
         return adam.minimize(self.loss, self.global_step)
 
     def train(self, restore_file=None, restore_list=None, task='hehe1', max_iter=500000):
