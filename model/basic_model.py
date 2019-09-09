@@ -47,6 +47,7 @@ class BasicModel(object):
         self.lamb = kwargs.get('lamb', 3)
         self.cls_from = kwargs.get('cls_from', 's')
         self.lr = kwargs.get('lr', 2e-4)
+        self.cali = kwargs.get('cali', .5)
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
@@ -106,7 +107,7 @@ class BasicModel(object):
             # mmd_loss_z = mmd.basic_mmd(self.pred_s, tf.concat([self.label_emb, self.z_random], axis=1), scale=0.025)
             mmd_loss_z = mmd.basic_mmd(self.pred_s_2, self.z_random, scale=0.025)
 
-            loss_v = tf.reduce_mean(cls_loss) + .5 * cal_loss
+            loss_v = tf.reduce_mean(cls_loss) + self.cali * cal_loss
 
             loss_z = self.lamb * mmd_loss_z  # - self.det_1
 
@@ -134,7 +135,7 @@ class BasicModel(object):
 
     def _build_opt(self):
         self.loss = self._build_loss()
-        adam = tf.train.AdamOptimizer(1e-3)
+        adam = tf.train.AdamOptimizer(self.lr)
         return adam.minimize(self.loss, self.global_step)
 
     def train(self, restore_file=None, restore_list=None, task='hehe1', max_iter=500000):

@@ -82,7 +82,7 @@ def reverse_features(name, h, reverse=False):
 
 
 class SimpleINN(object):
-    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn):
+    def __init__(self, name, hidden_size=1024, level=1, depth=4, permute=1, nn=simple_nn):
         self.name = name
         self.hidden_size = hidden_size
         self.level = level or 1
@@ -151,7 +151,7 @@ class SimpleINN(object):
         return tensor_in, det
 
     def __call__(self, tensor_in: tf.Tensor, det, forward=True):
-        return self._single_level('level_1', tensor_in, det, forward=True)
+        return self._single_level(self.name + '_level_1', tensor_in, det, forward=True)
 
 
 class SimplerINN(SimpleINN):

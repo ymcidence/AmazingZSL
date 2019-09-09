@@ -64,6 +64,7 @@ class BidirectionalModel(SimpleGanModel):
             # 3. v'->s'
             connected_e_1 = tf.concat([self.cls_emb, self.zero_padding], 1)
             self.mid_e, _ = inn_2(connected_e_1, 0, forward=False)
+            self.mid_e = tf.stop_gradient(self.mid_e)
 
         with tf.variable_scope('critic') as scope:
             # 1. real
@@ -79,14 +80,17 @@ class BidirectionalModel(SimpleGanModel):
     def _build_loss(self):
         with tf.name_scope('actor'):
             # 1. regression loss
-            reg_loss = tf.nn.l2_loss(self.pred_s_1 - self.label_emb)
+            # reg_loss = tf.nn.l2_loss(self.pred_s_1 - self.label_emb)
+            reg_loss = tf.reduce_mean(
+                partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp))
             # 2. cls loss
-            cls_loss = partial_semantic_cls(self.mid_s_1, self.mid_e, self.label, self.s_cls, self.soft_max_temp)
+            cls_loss = tf.reduce_mean(
+                partial_semantic_cls(self.mid_s_1, self.mid_e, self.label, self.s_cls, self.soft_max_temp))
             cal_loss = calibration_loss(self.mid_s_1, self.mid_e, self.u_cls, self.soft_max_temp)
             # 3. gan loss
             z_loss_fake = (tf.reduce_mean(self.d_v_fake) + tf.reduce_mean(self.d_s_fake)) * -1
 
-            loss_mid = tf.reduce_mean(cls_loss) + self.cali * cal_loss
+            loss_mid = cls_loss + self.cali * cal_loss
 
             loss_z = self.lamb * z_loss_fake
 

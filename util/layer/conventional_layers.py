@@ -231,3 +231,10 @@ def gumbel_trick(x: tf.Tensor, temp, stochastic=True):
     eps = tf.random_uniform(tf.shape(x), minval=0, maxval=1) if stochastic else tf.ones(tf.shape(x)) / 2.
     gumbel = -tf.log(-tf.log(eps))
     return tf.nn.softmax((x + gumbel) / temp)
+
+
+def label_select(feat, one_hot_label, label_part, cls_num):
+    cls_flag = tf.expand_dims(tf.reduce_sum(tf.one_hot(label_part, depth=cls_num), 0), -1)
+    flag = one_hot_label @ cls_flag
+    indices = tf.where(flag > 0)[:, 0]
+    return tf.gather(feat, indices)

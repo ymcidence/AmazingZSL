@@ -12,7 +12,7 @@ class SimpleGanModel(BasicModel):
         inn = self.InnModule('inn', int(self.feat_size / 2))
 
         with tf.variable_scope('actor') as scope:
-            # 1. v->s
+            # 1. v->s'
             self.pred_s, self.det_1 = inn(self.feat, 0)
             self.pred_s_1 = self.pred_s[:, :self.emb_size]
             self.pred_s_2 = self.pred_s[:, self.emb_size:]
@@ -21,7 +21,7 @@ class SimpleGanModel(BasicModel):
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
             # 3. v'->s'
-            self.pred_ss, _ = inn(tf.stop_gradient(self.pred_v), 0)
+            self.pred_ss, _ = inn(self.pred_v, 0)
             self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
 
         with tf.variable_scope('critic') as scope:
@@ -38,7 +38,7 @@ class SimpleGanModel(BasicModel):
 
             z_loss_fake = (tf.reduce_mean(self.d_v_fake) + tf.reduce_mean(self.d_s_fake)) * -1
 
-            loss_v = tf.reduce_mean(cls_loss) + .5 * cal_loss
+            loss_v = tf.reduce_mean(cls_loss) + self.cali * cal_loss
 
             loss_z = self.lamb * z_loss_fake  # - self.det_1
 
@@ -173,9 +173,9 @@ class ImprovedGanModel(SimpleGanModel):
 
             z_loss_fake = (tf.reduce_mean(self.d_v_fake) + tf.reduce_mean(self.d_s_fake)) * -1
 
-            loss_v = tf.reduce_mean(cls_loss) + .5 * cal_loss
+            loss_v = tf.reduce_mean(cls_loss) + self.cali * cal_loss
 
-            loss_z = z_loss_fake  # * self.lamb  # - self.det_1
+            loss_z = z_loss_fake * self.lamb  # - self.det_1
 
             loss_actor = loss_v + loss_z
 
@@ -187,7 +187,7 @@ class ImprovedGanModel(SimpleGanModel):
         with tf.name_scope('critic'):
             p_loss = tf.reduce_mean(self.d_s_fake) + tf.reduce_mean(self.d_v_fake) - tf.reduce_mean(
                 self.d_s_real) - tf.reduce_mean(self.d_v_real)
-            loss_critic = p_loss  # * self.lamb
+            loss_critic = p_loss * self.lamb
 
             v_hat_g = tf.gradients(self.d_v_hat, self.v_hat)[0]
             s_hat_g = tf.gradients(self.d_s_hat, self.s_hat)[0]
@@ -217,3 +217,63 @@ class ImprovedGanModel(SimpleGanModel):
                                                                   var_list=critic_var)
 
         return actor_opt, critic_opt
+
+
+class ComplexGanModel(SimpleGanModel):
+    def __build_net(self):
+        self._get_feat()
+        inn = self.InnModule('inn', int(self.feat_size / 2))
+
+        with tf.variable_scope('actor') as scope:
+            # 1. v->s'
+            self.pred_s, self.det_1 = inn(self.feat, 0)
+            self.pred_s_1 = self.pred_s[:, :self.emb_size]
+            self.pred_s_2 = self.pred_s[:, self.emb_size:]
+            # 2. s->v'
+            scope.reuse_variables()
+            connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
+            self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
+            # 3. s'->v'
+            connected_emb_2 = tf.concat([self.pred_s_1, self.z_padding], 1)
+            self.pred_vv, _ = inn(tf.stop_gradient(connected_emb_2), 0)
+            self.pred_vv_1 = self.pred_vv[:, :self.emb_size]
+
+        with tf.variable_scope('critic') as scope:
+            self.d_v_real = tf.sigmoid(layers.fc_layer('fc_v', self.feat, 1))
+            self.d_s_real = tf.sigmoid(layers.fc_layer('fc_s', connected_emb, 1))
+            scope.reuse_variables()
+            v_fake = tf.concat([self.pred_v, self.pred_vv], 0)
+            self.d_v_fake = tf.sigmoid(layers.fc_layer('fc_v', v_fake, 1))
+            self.d_s_fake = tf.sigmoid(layers.fc_layer('fc_s', self.pred_s, 1))
+
+    def _build_loss(self):
+        with tf.name_scope('actor'):
+            cls_loss = partial_semantic_cls(self.pred_s_1, self.cls_emb, self.label, self.s_cls, self.soft_max_temp)
+            cal_loss = calibration_loss(self.pred_s_1, self.cls_emb, self.u_cls, self.soft_max_temp)
+
+            unseen_vv = layers.label_select(self.pred_ss_1, self.random_label, self.u_cls, self.cls_num)
+            cal_u_loss = calibration_loss(unseen_vv, self.cls_emb, self.u_cls, self.soft_max_temp)
+
+            z_loss_fake = (tf.reduce_mean(self.d_v_fake) + tf.reduce_mean(self.d_s_fake)) * -1
+
+            loss_v = tf.reduce_mean(cls_loss) + self.cali * cal_loss - 0.1 * cal_u_loss
+
+            loss_z = self.lamb * z_loss_fake  # - self.det_1
+
+            loss_actor = loss_v + loss_z
+
+            tf.summary.scalar('loss_v', loss_v)
+            tf.summary.scalar('loss_z', loss_z)
+            tf.summary.scalar('cal_loss', cal_loss)
+            tf.summary.scalar('cal_u_loss', cal_u_loss)
+            tf.summary.scalar('loss_actor', loss_actor)
+
+        with tf.name_scope('critic'):
+            p_loss = tf.reduce_mean(self.d_s_fake) + tf.reduce_mean(self.d_v_fake) - tf.reduce_mean(
+                self.d_s_real) - tf.reduce_mean(self.d_v_real)
+
+            loss_critic = self.lamb * p_loss
+
+            tf.summary.scalar('loss_critic', loss_critic)
+
+        return loss_actor, loss_critic
