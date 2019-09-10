@@ -1,4 +1,4 @@
-from model.basic_model import BasicModel as Model
+from model.basic_model import ClsModel as Model
 from absl import flags
 from absl import app
 from config import basic_config as config

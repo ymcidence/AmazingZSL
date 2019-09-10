@@ -10,36 +10,48 @@ awa_1 = {'sess': SESS,
          'batch_size': 512,
          'set_name': 'AWA1',
          'gan': False,
-         'task_name': 'hehe',
-         'max_iter': 50000,
-         'temp': .5,
+         'task_name': 'basic_correct',
+         'max_iter': 30000,
+         'temp': .7,
          'lamb': 10,
          'cls_from': 's',
-         'lr': 1e-3}
+         'lr': 5e-4,
+         'inn_module': inn_module.SimpleINN,
+         'cali': .5,
+         'depth': 1,
+         'norm': False,
+         'coupling': 1
+         }
 
 awa_1_gan = {'sess': SESS,
              'batch_size': 512,
              'set_name': 'AWA1',
-             'task_name': 'simple_actnorm',
+             'task_name': 'correct_v',
              'max_iter': 50000,
              'temp': .5,
              'lamb': 10,
              'cls_from': 's',
              'lr': 2e-4,
              'inn_module': inn_module.SimpleINN,
-             'cali': .5}
+             'cali': .5,
+             'depth': 1,
+             'norm': False}
 
 awa_1_igan = {'sess': SESS,
               'batch_size': 512,
               'set_name': 'AWA1',
-              'task_name': 'iwg_l10',
+              'task_name': 'iwg_correct',
               'max_iter': 50000,
               'temp': .5,
               'lamb': 3,
               'lamb2': 10,
               'cls_from': 's',
               'lr': 2e-4,
-              'cali': .6}
+              'inn_module': inn_module.SimpleINN,
+              'cali': .5,
+              'depth': 1,
+              'norm': False
+              }
 
 awa_1_bi = {'sess': SESS,
             'batch_size': 512,

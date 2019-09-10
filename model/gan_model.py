@@ -9,7 +9,8 @@ from model.basic_model import BasicModel, calibration_loss, partial_semantic_cls
 class SimpleGanModel(BasicModel):
     def _build_net(self):
         self._get_feat()
-        inn = self.InnModule('inn', int(self.feat_size / 2))
+        inn = self.InnModule('inn', int(self.feat_size / 2), depth=self.depth, coupling=self.coupling,
+                             permute=self.permute, norm=self.norm)
 
         with tf.variable_scope('actor') as scope:
             # 1. v->s'
@@ -20,6 +21,10 @@ class SimpleGanModel(BasicModel):
             scope.reuse_variables()
             connected_emb = tf.concat([self.random_emb, self.z_padding], 1)
             self.pred_v, self.det_2 = inn(connected_emb, 0, forward=False)
+
+            ve = tf.concat([self.cls_emb, self.zero_padding], 1)
+            self.pred_ve, _ = inn(ve, 0, forward=False)
+
             # 3. v'->s'
             self.pred_ss, _ = inn(self.pred_v, 0)
             self.pred_ss_1 = self.pred_ss[:, :self.emb_size]
@@ -93,10 +98,13 @@ class SimpleGanModel(BasicModel):
         for i in range(max_iter):
             # 1. train
             feed_dict = {self.data.train_test_handle: self.data.training_handle}
+            s_f = self.pred_s_1 if self.cls_from == 's' else self.feat
+            s_e = self.cls_emb if self.cls_from == 's' else self.pred_ve
+
             # 1.1 actor
             s_value, label_value, emb_value, a_loss_value, c_loss_value, _, a_summary_value, c_summary_value, step_value = self.sess.run(
-                [self.pred_s_1, self.label,
-                 self.cls_emb, self.actor_loss,
+                [s_f, self.label,
+                 s_e, self.actor_loss,
                  self.critic_loss, opt[1],
                  a_summary, c_summary,
                  self.global_step],
@@ -109,12 +117,12 @@ class SimpleGanModel(BasicModel):
                 seen_dict = {self.data.train_test_handle: self.data.seen_handle}
                 unseen_dict = {self.data.train_test_handle: self.data.unseen_handle}
 
-                seen_s, seen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=seen_dict)
-                unseen_s, unseen_label = self.sess.run([self.pred_s_1, self.label], feed_dict=unseen_dict)
+                seen_s, seen_label, e_value = self.sess.run([s_f, self.label, s_e], feed_dict=seen_dict)
+                unseen_s, unseen_label = self.sess.run([s_f, self.label], feed_dict=unseen_dict)
 
                 train_acc = zsl_acc.cls_wise_acc(s_value, label_value, emb_value)
-                seen_acc = zsl_acc.cls_wise_acc(seen_s, seen_label, emb_value)
-                unseen_acc = zsl_acc.cls_wise_acc(unseen_s, unseen_label, emb_value)
+                seen_acc = zsl_acc.cls_wise_acc(seen_s, seen_label, e_value)
+                unseen_acc = zsl_acc.cls_wise_acc(unseen_s, unseen_label, e_value)
                 h_score = zsl_acc.h_score(seen_acc, unseen_acc)
 
                 hook_summary = tf.Summary(value=[tf.Summary.Value(tag='hook/train_acc', simple_value=train_acc)])
@@ -135,7 +143,8 @@ class ImprovedGanModel(SimpleGanModel):
 
     def _build_net(self):
         self._get_feat()
-        inn = self.InnModule('inn', int(self.feat_size / 2))
+        inn = self.InnModule('inn', int(self.feat_size / 2), depth=self.depth, coupling=self.coupling,
+                             permute=self.permute, norm=self.norm)
         eps = tf.random_uniform([], 0.0, 1.0)
 
         with tf.variable_scope('actor') as scope:

@@ -127,7 +127,7 @@ def simple_coupling(x, det, nn, hidden_size, feat_size, forward=True):
         h = nn('nn', x2, hidden_size, feat_size)
         shift = h[:, 0::2]
         scale = nn_exp(h[:, 1::2])
-        x1 = (x1 - shift) / scale
+        x1 = (x1 - shift) / (scale + 1e-8)
 
         det = det - tf.reduce_sum(tf.log(scale + 1e-8), axis=1)
 
@@ -159,8 +159,8 @@ def double_coupling(x, det, nn, hidden_size, feat_size, forward=True):
         s2 = h2[:, 0::2]
         t2 = h2[:, 1::2]
 
-        y2 = (x2 - t1) / nn_exp(s1)
-        y1 = (x1 - t2) / nn_exp(s2)
+        y2 = (x2 - t1) / (nn_exp(s1) + 1e-8)
+        y1 = (x1 - t2) / (nn_exp(s2) + 1e-8)
 
         y = tf.concat([y1, y2], axis=1)
         det = det - tf.reduce_sum(tf.log(nn_exp(s1) + 1e-8), axis=1) - tf.reduce_sum(tf.log(nn_exp(s2) + 1e-8), axis=1)
@@ -168,7 +168,7 @@ def double_coupling(x, det, nn, hidden_size, feat_size, forward=True):
 
 
 class SimpleINN(object):
-    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn, coupling=1):
+    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn, coupling=1, norm=True):
         self.name = name
         self.hidden_size = hidden_size
         self.level = level or 1
@@ -177,6 +177,7 @@ class SimpleINN(object):
         self.depth = depth or 1
         self.permute = permute
         self.nn = nn
+        self.norm = norm
         self.coupling = [simple_coupling, double_coupling, simple_coupling_old][coupling]
 
     @add_arg_scope
@@ -185,7 +186,10 @@ class SimpleINN(object):
         with tf.variable_scope(name):
             if forward:
                 # 1. actnorm
-                x, det = inn_layers.actnorm('actnorm', tensor_in, logdet=det)
+                if self.norm:
+                    x, det = inn_layers.actnorm('actnorm', tensor_in, logdet=det)
+                else:
+                    x = tensor_in
 
                 # 2. permutation
                 if self.permute == 1:
@@ -211,7 +215,10 @@ class SimpleINN(object):
                     raise NotImplementedError()
 
                 # 1. actnorm
-                x, det = inn_layers.actnorm('actnorm', x, logdet=det, reverse=True)
+                if self.norm:
+                    x, det = inn_layers.actnorm('actnorm', x, logdet=det, reverse=True)
+                else:
+                    x, det = x, det
 
         return x, det
 
@@ -270,7 +277,7 @@ class SimplerINN(SimpleINN):
 
 
 def test_inn_1():
-    model = SimpleINN('hehe', 4, depth=8, coupling=2, permute=1)
+    model = SimpleINN('hehe', 4, depth=8, coupling=1, permute=1)
     a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, _ = model(a, 0)
@@ -285,15 +292,15 @@ def test_inn_1():
 
 
 def test_inn_2():
-    model = SimpleINN('hehe', 4, depth=1, coupling=1, permute=1)
+    model = SimpleINN('hehe', 4, depth=1, coupling=0, permute=1, norm=False)
     a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, det = model(a, 0)
         scope.reuse_variables()
         dec_a, _ = model(enc_a, 0, forward=False)
 
-    loss = tf.nn.l2_loss(enc_a ** 2) / 8  # - tf.reduce_sum(det)
-    op = tf.train.GradientDescentOptimizer(.0001)
+    loss = tf.nn.l2_loss(enc_a) / 8 - tf.reduce_sum(det)
+    op = tf.train.GradientDescentOptimizer(.001)
     opt = op.minimize(loss)
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -307,4 +314,4 @@ def test_inn_2():
 
 
 if __name__ == '__main__':
-    test_inn_1()
+    test_inn_2()
