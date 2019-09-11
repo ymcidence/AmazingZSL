@@ -8,6 +8,7 @@
       <w>logdet</w>
       <w>logits</w>
       <w>matlab</w>
+      <w>mnist</w>
       <w>relu</w>
       <w>revnet</w>
       <w>tfrecord</w>
