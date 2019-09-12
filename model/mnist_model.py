@@ -1,7 +1,7 @@
 import tensorflow as tf
 from util.flow.inn_module import SimpleINN
 from util.data.mnist import Dataset
-from util.layer.mmd import basic_mmd
+from util.layer import mmd
 from time import gmtime, strftime
 import os
 
@@ -30,7 +30,7 @@ class MNISTModel(object):
 
     def _build_net(self):
         self._get_feat()
-        self.inn = SimpleINN('mnist', self.dim, depth=1)
+        self.inn = SimpleINN('mnist', self.dim, depth=1, norm=False)
         with tf.variable_scope('mnist') as scope:
             self.yz_hat, _ = self.inn(self.feat, 0)
             self.y_hat = self.yz_hat[:, :self.emb_size]
@@ -51,8 +51,14 @@ class MNISTModel(object):
     def _build_loss(self):
         with tf.name_scope('actor'):
             cls_loss = tf.nn.l2_loss(self.y_hat - self.label)
-            z_loss = basic_mmd(self.yz_hat, self.random_condition, scale=0.025)
-            x_loss = basic_mmd(self.gen, self.feat, scale=0.025) + basic_mmd(self.x_hat, self.feat, scale=0.025)
+            # cls_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.label, logits=self.y_hat))
+            z_loss = mmd.basic_mmd(self.z_hat, self.z_random, scale=0.025)
+            # x_loss = mmd.basic_mmd(self.gen, self.feat, scale=0.025) + mmd.basic_mmd(self.x_hat, self.feat, scale=0.025)
+
+            x_loss = mmd.category_mmd(self.gen, self.feat, self.random_label, self.label, 'IMQ')
+            # x_loss += mmd.basic_mmd(self.x_hat, self.feat, scale=0.025)
+            x_loss += tf.nn.l2_loss(self.x_hat-self.feat)/self.batch_size
+
             loss = cls_loss + 10 * (z_loss + x_loss)
 
             tf.summary.scalar('y_loss', cls_loss)
@@ -69,7 +75,7 @@ class MNISTModel(object):
 
     def _build_opt(self):
         self.loss = self._build_loss()
-        adam = tf.train.AdamOptimizer()
+        adam = tf.train.AdamOptimizer(5e-4)
         opt = adam.minimize(self.loss, self.global_step)
         return opt
 
