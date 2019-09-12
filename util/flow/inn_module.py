@@ -104,11 +104,11 @@ def simple_coupling_old(x, det, nn, hidden_size, feat_size, forward=True):
     return x, det
 
 
-def nn_exp(x, clamp=5.):
+def nn_exp(x, clamp=1.):
     return tf.exp(clamp * .636 * tf.atan(x))
 
 
-def nn_log(x, clamp=5.):
+def nn_log(x, clamp=1.):
     return clamp * .636 * tf.atan(x)
 
 
@@ -197,7 +197,7 @@ class SimpleINN(object):
                 elif self.permute == 0:
                     x = reverse_features('reverse', x)
                 else:
-                    x = x
+                    x, det = invertible_projection('inv', x, det)
 
                 # 3. coupling
                 x, det = self.coupling(x, det, self.nn, self.hidden_size, feat_size, forward=True)
@@ -212,7 +212,7 @@ class SimpleINN(object):
                 elif self.permute == 1:
                     x = inn_layers.shuffle_features('shuffle', x, reverse=True)
                 else:
-                    raise NotImplementedError()
+                    x, det = invertible_projection('inv', tensor_in, det, forward=False)
 
                 # 1. actnorm
                 if self.norm:
@@ -277,7 +277,7 @@ class SimplerINN(SimpleINN):
 
 
 def test_inn_1():
-    model = SimpleINN('hehe', 4, depth=8, coupling=1, permute=1)
+    model = SimpleINN('hehe', 4, depth=4, coupling=2, permute=1)
     a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, _ = model(a, 0)
@@ -292,7 +292,7 @@ def test_inn_1():
 
 
 def test_inn_2():
-    model = SimpleINN('hehe', 4, depth=1, coupling=0, permute=1, norm=False)
+    model = SimpleINN('hehe', 4, depth=1, coupling=1, permute=1, norm=False)
     a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, det = model(a, 0)
@@ -314,4 +314,4 @@ def test_inn_2():
 
 
 if __name__ == '__main__':
-    test_inn_2()
+    test_inn_1()
