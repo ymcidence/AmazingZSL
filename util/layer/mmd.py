@@ -34,14 +34,17 @@ def basic_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, kernel='IMQ', scale=SCAL
         :param kernel: only 'IMQ' supported
         :param scale: kernel hyper-parameter
         :return:
+
     """
-    dist_1 = distance(tensor_a, tensor_a)
-    dist_2 = distance(tensor_b, tensor_b)
+    batch_size = tf.cast(tf.shape(tensor_a)[0], dtype=tf.float32)
+
+    dist_1 = distance(tensor_a, tensor_a) * (1. - tf.eye(batch_size))
+    dist_2 = distance(tensor_b, tensor_b) * (1. - tf.eye(batch_size))
     dist_3 = distance(tensor_a, tensor_b)
 
     batch_size = tf.cast(tf.shape(tensor_a)[0], dtype=tf.float32)
     s = tensor_a.shape.as_list()[1]
-    c = 2 * s * scale
+    c = 2
 
     if kernel == 'IMQ':
         kernelized_1 = c / (c + dist_1)

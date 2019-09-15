@@ -72,6 +72,7 @@ def simple_nn(name, tensor_in: tf.Tensor, middle_dim, output_dim=None):
     output_dim = output_dim or tensor_in.shape.as_list()[-1]
     with tf.variable_scope(name):
         fc_1 = layers.fc_layer('fc_1', tensor_in, middle_dim)
+        fc_1 = layers.leaky_relu(fc_1)
         fc_2 = layers.fc_layer('fc_2', fc_1, output_dim)
     return fc_2
 
@@ -80,8 +81,94 @@ def reverse_features(name, h, reverse=False):
     return h[:, ::-1]
 
 
+def simple_coupling_old(x, det, nn, hidden_size, feat_size, forward=True):
+    if forward:
+        x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
+        h = nn('nn', x1, hidden_size, feat_size)
+        shift = h[:, 0::2]
+        scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
+        x2 = (x2 + shift) * scale
+        det = det + tf.reduce_sum(tf.log(scale), axis=1)
+        x = tf.concat([x1, x2], axis=1)
+
+    else:
+        x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
+        h = nn('nn', x1, hidden_size, feat_size)
+        shift = h[:, 0::2]
+        scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
+        x2 = x2 / scale - shift
+
+        det = det - tf.reduce_sum(tf.log(scale), axis=1)
+
+        x = tf.concat([x1, x2], axis=1)
+    return x, det
+
+
+def nn_exp(x, clamp=1.):
+    return tf.exp(clamp * .636 * tf.atan(x))
+
+
+def nn_log(x, clamp=1.):
+    return clamp * .636 * tf.atan(x)
+
+
+def simple_coupling(x, det, nn, hidden_size, feat_size, forward=True):
+    if forward:
+        x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
+        h = nn('nn', x2, hidden_size, feat_size)
+        shift = h[:, 0::2]
+        scale = nn_exp(h[:, 1::2])
+        x1 = x1 * scale + shift
+        det = det + tf.reduce_sum(tf.log(scale + 1e-8), axis=1)
+        x = tf.concat([x1, x2], axis=1)
+
+    else:
+        x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
+        h = nn('nn', x2, hidden_size, feat_size)
+        shift = h[:, 0::2]
+        scale = nn_exp(h[:, 1::2])
+        x1 = (x1 - shift) / (scale + 1e-8)
+
+        det = det - tf.reduce_sum(tf.log(scale + 1e-8), axis=1)
+
+        x = tf.concat([x1, x2], axis=1)
+    return x, det
+
+
+def double_coupling(x, det, nn, hidden_size, feat_size, forward=True):
+    x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
+    if forward:
+
+        h1 = nn('nn_1', x1, hidden_size, feat_size)
+        h2 = nn('nn_2', x2, hidden_size, feat_size)
+        s1 = h1[:, 0::2]
+        t1 = h1[:, 1::2]
+        s2 = h2[:, 0::2]
+        t2 = h2[:, 1::2]
+
+        y1 = nn_exp(s2) * x1 + t2
+        y2 = nn_exp(s1) * x2 + t1
+
+        det = det + tf.reduce_sum(tf.log(nn_exp(s1) + 1e-8), axis=1) + tf.reduce_sum(tf.log(nn_exp(s2) + 1e-8), axis=1)
+        y = tf.concat([y1, y2], axis=1)
+    else:
+        h1 = nn('nn_1', x1, hidden_size, feat_size)
+        h2 = nn('nn_2', x2, hidden_size, feat_size)
+        s1 = h1[:, 0::2]
+        t1 = h1[:, 1::2]
+        s2 = h2[:, 0::2]
+        t2 = h2[:, 1::2]
+
+        y2 = (x2 - t1) / (nn_exp(s1) + 1e-8)
+        y1 = (x1 - t2) / (nn_exp(s2) + 1e-8)
+
+        y = tf.concat([y1, y2], axis=1)
+        det = det - tf.reduce_sum(tf.log(nn_exp(s1) + 1e-8), axis=1) - tf.reduce_sum(tf.log(nn_exp(s2) + 1e-8), axis=1)
+    return y, det
+
+
 class SimpleINN(object):
-    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn):
+    def __init__(self, name, hidden_size=1024, level=1, depth=3, permute=1, nn=simple_nn, coupling=1, norm=True):
         self.name = name
         self.hidden_size = hidden_size
         self.level = level or 1
@@ -90,6 +177,8 @@ class SimpleINN(object):
         self.depth = depth or 1
         self.permute = permute
         self.nn = nn
+        self.norm = norm
+        self.coupling = [simple_coupling, double_coupling, simple_coupling_old][coupling]
 
     @add_arg_scope
     def _single_depth(self, name, tensor_in: tf.Tensor, det, forward=True):
@@ -97,36 +186,25 @@ class SimpleINN(object):
         with tf.variable_scope(name):
             if forward:
                 # 1. actnorm
-                # x, det = inn_layers.actnorm('actnorm', tensor_in, logdet=det)
+                if self.norm:
+                    x, det = inn_layers.actnorm('actnorm', tensor_in, logdet=det)
+                else:
+                    x = tensor_in
 
                 # 2. permutation
                 if self.permute == 1:
-                    x = inn_layers.shuffle_features('shuffle', tensor_in)
+                    x = inn_layers.shuffle_features('shuffle', x)
                 elif self.permute == 0:
-                    x = reverse_features('reverse', tensor_in)
+                    x = reverse_features('reverse', x)
                 else:
-                    raise NotImplementedError()
+                    x, det = invertible_projection('inv', x, det)
 
                 # 3. coupling
-                x1, x2 = tf.split(x, num_or_size_splits=2, axis=1)
-                h = self.nn('nn', x1, self.hidden_size, feat_size)
-                shift = h[:, 0::2]
-                scale = tf.nn.sigmoid(h[:, 1::2] + 2.)
-                x2 = (x2 + shift) * scale
-                det = det + tf.reduce_sum(tf.log(scale), axis=1)
-                x = tf.concat([x1, x2], axis=1)
+                x, det = self.coupling(x, det, self.nn, self.hidden_size, feat_size, forward=True)
 
             else:
                 # 3. coupling
-                x1, x2 = tf.split(tensor_in, num_or_size_splits=2, axis=1)
-                h = self.nn('nn', x1, self.hidden_size, feat_size)
-                shift = h[:, 0::2]
-                scale = tf.nn.sigmoid(h[:, 1::2] + 2.) + 1e-8
-                x2 = x2 / scale - shift
-
-                det = det - tf.reduce_sum(tf.log(scale), axis=1)
-
-                x = tf.concat([x1, x2], axis=1)
+                x, det = self.coupling(tensor_in, det, self.nn, self.hidden_size, feat_size, forward=False)
 
                 # 2. permutation
                 if self.permute == 0:
@@ -134,23 +212,30 @@ class SimpleINN(object):
                 elif self.permute == 1:
                     x = inn_layers.shuffle_features('shuffle', x, reverse=True)
                 else:
-                    raise NotImplementedError()
+                    x, det = invertible_projection('inv', tensor_in, det, forward=False)
 
                 # 1. actnorm
-                # x, det = inn_layers.actnorm('actnorm', x, logdet=det, reverse=True)
+                if self.norm:
+                    x, det = inn_layers.actnorm('actnorm', x, logdet=det, reverse=True)
+                else:
+                    x, det = x, det
 
         return x, det
 
     @add_arg_scope
     def _single_level(self, name, tensor_in: tf.Tensor, det, forward=True):
         with tf.variable_scope(name):
-            for i in range(self.depth):
-                tensor_in, det = self._single_depth('depth_{}'.format(i), tensor_in, det, forward=forward)
+            if forward:
+                for i in range(self.depth):
+                    tensor_in, det = self._single_depth('depth_{}'.format(i), tensor_in, det, forward=forward)
+            else:
+                for i in reversed(range(self.depth)):
+                    tensor_in, det = self._single_depth('depth_{}'.format(i), tensor_in, det, forward=forward)
 
         return tensor_in, det
 
     def __call__(self, tensor_in: tf.Tensor, det, forward=True):
-        return self._single_level('level_1', tensor_in, det, forward=True)
+        return self._single_level(self.name + '_level_1', tensor_in, det, forward=forward)
 
 
 class SimplerINN(SimpleINN):
@@ -192,8 +277,8 @@ class SimplerINN(SimpleINN):
 
 
 def test_inn_1():
-    model = SimpleINN('hehe', 2)
-    a = tf.constant([[2., 1.], [3.5, 0.8]], dtype=tf.float32)
+    model = SimpleINN('hehe', 4, depth=4, coupling=2, permute=1)
+    a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, _ = model(a, 0)
         scope.reuse_variables()
@@ -207,21 +292,21 @@ def test_inn_1():
 
 
 def test_inn_2():
-    model = SimpleINN('hehe', 2, depth=1, permute=1)
-    a = tf.constant([[2., 1.], [3.5, 0.8]], dtype=tf.float32)
+    model = SimpleINN('hehe', 4, depth=1, coupling=1, permute=1, norm=False)
+    a = tf.constant([[2., 1., 5, 4], [3.5, 0.8, 7, 1.5]], dtype=tf.float32)
     with tf.variable_scope('hehe') as scope:
         enc_a, det = model(a, 0)
         scope.reuse_variables()
         dec_a, _ = model(enc_a, 0, forward=False)
 
-    loss = tf.nn.l2_loss(dec_a - a)
-    op = tf.train.GradientDescentOptimizer(.01)
+    loss = tf.nn.l2_loss(enc_a) / 8 - tf.reduce_sum(det)
+    op = tf.train.GradientDescentOptimizer(.001)
     opt = op.minimize(loss)
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
     for i in range(100):
-        hehe, _, dis, loss_value = sess.run([dec_a, opt, tf.nn.l2_loss(a - dec_a), loss])
+        he, hehe, _, dis, loss_value = sess.run([enc_a, dec_a, opt, tf.nn.l2_loss(a - dec_a), loss])
 
         print('Step {}, loss {}, dis {}'.format(i, loss_value, dis))
         if i % 5 == 0:
@@ -229,4 +314,4 @@ def test_inn_2():
 
 
 if __name__ == '__main__':
-    test_inn_2()
+    test_inn_1()

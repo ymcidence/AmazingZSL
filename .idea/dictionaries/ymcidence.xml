@@ -6,11 +6,15 @@
       <w>kernelized</w>
       <w>learntop</w>
       <w>logdet</w>
+      <w>logits</w>
       <w>matlab</w>
+      <w>mnist</w>
+      <w>relu</w>
       <w>revnet</w>
       <w>tfrecord</w>
       <w>tfrecords</w>
       <w>trainval</w>
+      <w>wgan</w>
       <w>ycond</w>
       <w>ymcidence</w>
       <w>ymmodel</w>

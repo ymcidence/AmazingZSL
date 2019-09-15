@@ -1,9 +1,9 @@
-from model.basic_model import ClsModel as Model
+from model.gan_model import ComplexGanModel as Model
 from absl import flags
 from absl import app
 from config import basic_config as config
 
-flags.DEFINE_string("c", 'awa_1', "config")
+flags.DEFINE_string("c", 'awa_1_comp', "config")
 FLAGS = flags.FLAGS
 
 
