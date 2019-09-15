@@ -34,7 +34,7 @@ class MNISTModel(object):
 
     def _build_net(self):
         self._get_feat()
-        self.inn = SimpleINN('mnist', self.dim, depth=2, norm=False, coupling=0, permute=2)
+        self.inn = SimpleINN('mnist', self.dim, depth=2, norm=False, coupling=0, permute=1)
         with tf.variable_scope('mnist') as scope:
             self.yz_hat, self.det = self.inn(self.feat, 0)
             self.y_hat = self.yz_hat[:, :self.emb_size]
@@ -81,7 +81,7 @@ class MNISTModel(object):
     def _build_loss_2(self):
         with tf.name_scope('actor'):
             loss_1 = tf.nn.l2_loss(self.yz_hat)
-            loss_2 = - tf.reduce_mean(self.det)
+            loss_2 =  tf.reduce_mean(self.det)
             tf.summary.scalar('loss_1', loss_1)
             tf.summary.scalar('loss_2', loss_2)
         return loss_1 + loss_2
@@ -227,4 +227,4 @@ class MNISTAdvModel(MNISTModel):
 
 if __name__ == '__main__':
     model = MNISTModel()
-    model.train(task='no_con12')
+    model.train(task='no_con333')

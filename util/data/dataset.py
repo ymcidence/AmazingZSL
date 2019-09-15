@@ -2,6 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 from util.data import set_profiles
+from util.data.array_reader import ArrayReader
 
 
 class ZSLMeta(object):
@@ -140,6 +141,14 @@ class Dataset(object):
         return self.unseen_data.handle
 
 
+class ZSLArrayReader(ArrayReader):
+    def __init__(self, set_name='AWA1', batch_size=256):
+        super().__init__(set_name, batch_size)
+
+    def _build_data(self):
+        return Dataset(set_name=self.set_name, sess=self.sess, batch_size=self.batch_size)
+
+
 # noinspection PyUnusedLocal
 def test_0():
     dataset = ZSLMeta(set_name='AWA1')
@@ -167,5 +176,11 @@ def test_2():
     print('hehe')
 
 
+def test_3():
+    reader = ZSLArrayReader()
+    batch = reader.get_batch()
+    print(batch)
+
+
 if __name__ == '__main__':
-    test_2()
+    test_3()

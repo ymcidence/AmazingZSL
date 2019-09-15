@@ -3,6 +3,11 @@ import tensorflow as tf
 import os
 import scipy.misc as misc
 import numpy as np
+import torch as th
+from util.data.array_reader import ArrayReader
+import torchvision.transforms as trans
+
+abspath = os.path.abspath(__file__)
 
 
 def process_mat(file_name):
@@ -74,7 +79,7 @@ class MNISTRecord(object):
             _label = tf.cast(features['label'], tf.float32)
             return _feat, _label
 
-        record_name = os.path.join('./data/MNIST', self.part_name + '.tfrecords')
+        record_name = os.path.join(abspath, '../../../data/MNIST', self.part_name + '.tfrecords')
         data = tf.data.TFRecordDataset(record_name).map(data_parser, num_parallel_calls=50).prefetch(self.batch_size)
         data = data.cache().repeat().shuffle(self.set_size).batch(self.batch_size)
         return data
@@ -130,6 +135,22 @@ class Dataset(object):
         return self.test_data.handle
 
 
+class MNISTArrayReader(ArrayReader):
+    def _build_data(self):
+        return Dataset(sess=self.sess, batch_size=self.batch_size)
+
+    def get_batch_tensor(self, part='training'):
+        batch = self.get_batch(part)
+        x = (th.tensor(batch[0], dtype=th.float32).cuda() - 0.128) / 0.305
+        l = th.tensor(batch[1], dtype=th.float32).cuda()
+        return x, l
+
+    @staticmethod
+    def augmentation(x):
+        x = x + 0.08 * th.randn_like(x)
+        return x
+
+
 def test_1():
     build_dataset('/home/ymcidence/Workspace/CodeGeass/MatlabWorkspace')
 
@@ -149,5 +170,11 @@ def test_2():
     print(image)
 
 
+def test_3():
+    reader = MNISTArrayReader()
+    batch = reader.get_batch('training')
+    print(batch)
+
+
 if __name__ == '__main__':
-    test_2()
+    test_3()
