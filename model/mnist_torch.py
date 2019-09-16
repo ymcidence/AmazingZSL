@@ -153,7 +153,7 @@ def train_alt(max_iter=50000):
     model = model.cuda()
     scheduler = th.optim.lr_scheduler.MultiStepLR(model.optimizer, milestones=[20, 40], gamma=0.1)
     time_string = strftime("%a%d%b%Y-%H%M%S", gmtime())
-    writer = SummaryWriter('./model/result/mnist2/log/' + 'old_cond_only_det' + time_string)
+    writer = SummaryWriter('./model/result/mnist2/log/' + 'old_cond_mmd_l2_10' + time_string)
     for i in range(max_iter):
         x, l = reader.get_batch_tensor()
         x = reader.augmentation(x)
@@ -170,16 +170,14 @@ def train_alt(max_iter=50000):
         z_hat = th.cat([l, random_signal], dim=1)
 
         mmd_y = mmd_matrix_multiscale(z0, z_hat,
-                                      widths_exponents=[(0.2, 2), (1.5, 2), (3.0, 2)])
+                                      widths_exponents=[(0.1, 1), (0.2, 1), (1.5, 1), (3.0, 1), (5.0, 1), (10.0, 1)])
 
         x_hat, _ = model(z_hat, l, one_hot_l=True, reverse=True)
 
         mmd_x = mmd_matrix_multiscale(x, x_hat,
-                                      widths_exponents=[(0.2, 2), (1.5, 2), (3.0, 2)])
+                                      widths_exponents=[(0.1, 1), (0.2, 1), (1.5, 1), (3.0, 1), (5.0, 1), (10.0, 1)])
 
-        loss = loss_y + (th.mean(mmd_y) + th.mean(mmd_x)) * 0. + th.mean(z ** 2) / 2 - th.mean(log_j) / (28 * 28)
-
-
+        loss = loss_y * 10 + (th.mean(mmd_y) + th.mean(mmd_x)) * 1. + 0. * (th.mean(z ** 2) / 2 - th.mean(log_j) / (28 * 28))
 
         loss.backward()
         th.nn.utils.clip_grad_norm_(model.trainable_parameters, 10.)

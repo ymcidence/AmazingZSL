@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import tensorflow as tf
+import torch as th
 from util.data import set_profiles
 from util.data.array_reader import ArrayReader
 
@@ -144,9 +145,19 @@ class Dataset(object):
 class ZSLArrayReader(ArrayReader):
     def __init__(self, set_name='AWA1', batch_size=256):
         super().__init__(set_name, batch_size)
+        self.content = ['feat', 'label', 'label_emb', 's_cls', 'u_cls', 'cls_emb', 's_cls_emb', 'u_cls_emb']
 
     def _build_data(self):
         return Dataset(set_name=self.set_name, sess=self.sess, batch_size=self.batch_size)
+
+    def get_batch_tensor(self, part='training'):
+        batch = self.get_batch(part)
+        feat = []
+        for i in self.content:
+            f = th.tensor(batch[i], dtype=th.float32).cuda()
+            feat.append(f)
+
+        return feat
 
 
 # noinspection PyUnusedLocal
