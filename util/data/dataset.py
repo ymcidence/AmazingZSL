@@ -2,6 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import torch as th
+import general
 from util.data import set_profiles
 from util.data.array_reader import ArrayReader
 
@@ -9,7 +10,7 @@ from util.data.array_reader import ArrayReader
 class ZSLMeta(object):
     def __init__(self, **kwargs):
         self.set_name = kwargs.get('set_name', 'AWA1')
-        self.meta_name = os.path.join('./data', self.set_name, 'meta_info.npy')
+        self.meta_name = os.path.join(general.ROOT_PATH + 'data', self.set_name, 'meta_info.npy')
         self.data = self._load_data()
         self._iterator = self.data.make_one_shot_iterator()
 
@@ -58,7 +59,7 @@ class ZSLRecord(object):
             _label_emb = tf.cast(features['label_emb'], tf.float32)
             return _id, _feat, _label, _label_emb
 
-        record_name = os.path.join('./data', self.set_name, self.part_name + '.tfrecords')
+        record_name = os.path.join(general.ROOT_PATH + 'data', self.set_name, self.part_name + '.tfrecords')
         data = tf.data.TFRecordDataset(record_name).map(data_parser, num_parallel_calls=50).prefetch(self.batch_size)
         data = data.cache().repeat().shuffle(self.set_size).batch(self.batch_size)
 
@@ -146,6 +147,7 @@ class ZSLArrayReader(ArrayReader):
     def __init__(self, set_name='AWA1', batch_size=256):
         super().__init__(set_name, batch_size)
         self.content = ['feat', 'label', 'label_emb', 's_cls', 'u_cls', 'cls_emb', 's_cls_emb', 'u_cls_emb']
+        self.parts = ['training', 'seen', 'unseen']
 
     def _build_data(self):
         return Dataset(set_name=self.set_name, sess=self.sess, batch_size=self.batch_size)
@@ -155,6 +157,10 @@ class ZSLArrayReader(ArrayReader):
         feat = []
         for i in self.content:
             f = th.tensor(batch[i], dtype=th.float32).cuda()
+            if i.find('_emb') > 0:
+                min_v = set_profiles.ATTR_SCOPE[self.set_name][0]
+                max_v = set_profiles.ATTR_SCOPE[self.set_name][1]
+                f = (f - min_v) / (max_v - min_v)
             feat.append(f)
 
         return feat
@@ -194,4 +200,4 @@ def test_3():
 
 
 if __name__ == '__main__':
-    test_3()
+    test_0()

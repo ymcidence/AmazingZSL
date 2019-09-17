@@ -2,8 +2,15 @@ import FrEIA.framework as ff
 import FrEIA.modules as fm
 import torch.nn as nn
 import torch as th
+import numpy as np
+import os
+import general
+from torch.utils.tensorboard import SummaryWriter
 from util.data import set_profiles
 from util.data.dataset import ZSLArrayReader as Reader
+from util.layer.mmd import mmd_matrix_multiscale
+from util.eval import zsl_acc
+from time import gmtime, strftime
 
 
 class BasicModule(nn.Module):
@@ -12,7 +19,9 @@ class BasicModule(nn.Module):
         self.lr = lr
         self.feat_length = feat_length
         self.depth = depth
+        self.cinn = self._inn()
 
+        # noinspection PyUnresolvedReferences
         self.trainable_parameters = [p for p in self.cinn.parameters() if p.requires_grad]
         for p in self.trainable_parameters:
             # noinspection PyUnresolvedReferences
@@ -35,6 +44,7 @@ class BasicModule(nn.Module):
 
         return ff.ReversibleGraphNet(nodes + [ff.OutputNode(nodes[-1])], verbose=False)
 
+    # noinspection PyUnresolvedReferences
     def forward(self, x, reverse=False):
         z = self.cinn(x, rev=reverse)
         jac = self.cinn.log_jacobian(rev=reverse, run_forward=False)
@@ -47,12 +57,122 @@ class BasicTrainable(object):
         self.lamb = kwargs.get('lamb', 3)
         self.lr = kwargs.get('lr', 5e-4)
         self.depth = kwargs.get('depth', 20)
+        self.mmd_weight = kwargs.get('mmd_weight', [(0.1, 1), (0.2, 1), (1.5, 1), (3.0, 1), (5.0, 1), (10.0, 1)])
         self.seen_num = set_profiles.LABEL_NUM[self.set_name][0]
         self.unseen_num = set_profiles.LABEL_NUM[self.set_name][1]
         self.cls_num = self.seen_num + self.unseen_num
+        self.feat_size = set_profiles.FEAT_DIM[self.set_name]
+        self.emb_size = set_profiles.ATTR_DIM[self.set_name]
         self.batch_size = kwargs.get('batch_size', 256)
         self.reader = Reader(set_name=self.set_name, batch_size=self.batch_size)
-        self.inn = BasicModule(self.lr, depth=self.depth)
+        # noinspection PyUnresolvedReferences
+        self.inn = BasicModule(self.lr, feat_length=self.feat_size, depth=self.depth).cuda()
 
-    def _build_tensor(self, part):
-        this_feat = self.reader.get_batch_tensor()
+    def _step(self, writer: SummaryWriter, step):
+        batch_data = self.reader.get_batch_tensor(self.reader.parts[0])
+        feat = batch_data[0]
+        label = batch_data[1]
+        label_emb = batch_data[2]
+        s_cls = batch_data[3]
+        u_cls = batch_data[4]
+        cls_emb = batch_data[5]
+
+        # 1. forward
+        yz_hat, yz_det = self.inn(x=feat)
+        y_hat = yz_hat[:, :self.emb_size]
+        z_hat = yz_hat[:, self.emb_size:]
+
+        cls_loss = th.mean((y_hat - label_emb) ** 2)
+        jac_loss = -1 * th.mean(yz_det) / self.feat_size
+        z_loss = th.mean(z_hat ** 2) / 2
+
+        # 2. reverse
+        rand_ind = np.random.randint(0, self.cls_num, self.batch_size, dtype=np.int32)
+        rand_y = cls_emb[rand_ind, :]
+        rand_z = th.randn_like(z_hat).cuda()
+        rand_yz = th.cat([rand_y, rand_z], dim=1)
+        x_hat, _ = self.inn(x=rand_yz, reverse=True)
+
+        yz_mmd = th.mean(mmd_matrix_multiscale(rand_yz, yz_hat, self.mmd_weight))
+        x_mmd = th.mean(mmd_matrix_multiscale(feat, x_hat, self.mmd_weight))
+
+        # 3. forward-rev
+
+        x_new = x_hat.detach()
+        yz_new, det_hat = self.inn(x=x_new)
+
+        err = th.mean((yz_new - rand_yz)**2)/2
+
+
+
+        # FINAL. loss
+
+        loss = 10 * cls_loss + jac_loss + z_loss + (yz_mmd + x_mmd) * self.lamb
+        loss.backward()
+        th.nn.utils.clip_grad_norm_(self.inn.trainable_parameters, 10.)
+        self.inn.optimizer.step()
+        self.inn.optimizer.zero_grad()
+        if step % 50 == 0:
+            writer.add_scalar('train/loss', loss, step)
+            writer.add_scalar('train/yz_mmd', yz_mmd, step)
+            writer.add_scalar('train/x_mmd', x_mmd, step)
+            writer.add_scalar('train/cls_loss', cls_loss, step)
+            writer.add_scalar('train/jac_loss', jac_loss, step)
+            writer.add_scalar('train/z_loss', z_loss, step)
+            print('step {} loss {}'.format(step, loss.item()))
+        return cls_emb
+
+    # hook
+
+    def _hook(self, writer: SummaryWriter, step):
+        seen_data = self.reader.get_batch_tensor(self.reader.parts[1])
+        seen_feat = seen_data[0]
+        seen_label = seen_data[1]
+        cls_emb = seen_data[5]
+
+        unseen_data = self.reader.get_batch_tensor(self.reader.parts[2])
+        unseen_feat = unseen_data[0]
+        unseen_label = unseen_data[1]
+        with th.no_grad():
+            cls_emb = cls_emb.cpu().numpy()
+            seen_yz_hat, _ = self.inn(x=seen_feat)
+            seen_y_hat = seen_yz_hat[:, :self.emb_size]
+            seen_acc = zsl_acc.cls_wise_acc(seen_y_hat.cpu().numpy(), seen_label.cpu().numpy(), cls_emb)
+
+            unseen_yz_hat, _ = self.inn(x=unseen_feat)
+            unseen_y_hat = unseen_yz_hat[:, :self.emb_size]
+            unseen_acc = zsl_acc.cls_wise_acc(unseen_y_hat.cpu().numpy(), unseen_label.cpu().numpy(), cls_emb)
+
+            h_score = 2 * (seen_acc * unseen_acc) / (seen_acc + unseen_acc)
+
+            writer.add_scalar('hook/seen_acc', seen_acc, step)
+            writer.add_scalar('hook/unseen_acc', unseen_acc, step)
+            writer.add_scalar('hook/h_score', h_score, step)
+
+    def train(self, task='hehe1', max_iter=50000):
+        scheduler = th.optim.lr_scheduler.MultiStepLR(self.inn.optimizer, milestones=[20, 40], gamma=0.1)
+        time_string = strftime("%a%d%b%Y-%H%M%S", gmtime())
+        writer_name = os.path.join(general.ROOT_PATH + 'result/{}/log/'.format(self.set_name), task + time_string)
+        writer = SummaryWriter(writer_name)
+
+        for i in range(max_iter):
+            self._step(writer, i)
+            if i % 50 == 0:
+                self._hook(writer, i)
+
+            if i % 1000 == 0 and i > 0:
+                # noinspection PyArgumentList
+                scheduler.step()
+
+
+if __name__ == '__main__':
+    settings = {'task_name': 'torch1',
+                'set_name': 'AWA1',
+                'lamb': 0,
+                'lr': 5e-4,
+                'depth': 3,
+                'mmd_weight': [(0.1, 1), (0.2, 1), (1.5, 1), (3.0, 1), (5.0, 1), (10.0, 1)],
+                'batch_size': 256,
+                'max_iter': 50000}
+    model = BasicTrainable(**settings)
+    model.train(task=settings['task_name'], max_iter=settings['max_iter'])

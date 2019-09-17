@@ -10,10 +10,15 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
     :param emb: [C D]
     :return:
     """
-    cls_num = label.shape[1]
+
     distances = euclidean_distances(img_feat, emb)
     prediction = np.argmin(distances, axis=1)
-    gt = np.argmax(label, axis=1)
+    if label.shape.__len__() > 1:
+        cls_num = label.shape[1]
+        gt = np.argmax(label, axis=1)
+    else:
+        cls_num = int(np.max(label) + 1)
+        gt = label.astype(np.int32)
     acc = []
     for i in range(cls_num):
         ind = np.where(gt == i)[0]

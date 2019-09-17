@@ -5,6 +5,7 @@ import scipy.misc as misc
 import numpy as np
 import torch as th
 from util.data.array_reader import ArrayReader
+# noinspection PyUnresolvedReferences
 import torchvision.transforms as trans
 
 abspath = os.path.abspath(__file__)
