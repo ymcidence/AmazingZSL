@@ -168,7 +168,7 @@ class ZSLArrayReader(ArrayReader):
             if i.find('_emb') > 0:
                 min_v = set_profiles.ATTR_SCOPE[self.set_name][0]
                 max_v = set_profiles.ATTR_SCOPE[self.set_name][1]
-                f = 2 * ((f - min_v) / (max_v - min_v)) - 1
+                f = ((f - min_v) / (max_v - min_v)) * 1
             feat.append(f)
 
         return feat
