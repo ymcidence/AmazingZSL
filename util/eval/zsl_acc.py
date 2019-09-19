@@ -1,5 +1,20 @@
 import numpy as np
 from sklearn.metrics.pairwise import euclidean_distances
+import torch as th
+
+def one_hot(labels, out_dim=10):
+    """
+    Convert LongTensor labels (contains labels 0-out_dim), to a one hot vector.
+    Can be done in-place using the out-argument (faster, re-use of GPU memory)
+    :param labels:
+    :param out_dim:
+    :return:
+    """
+    # noinspection PyUnresolvedReferences
+    out = th.zeros(labels.shape[0], out_dim).to(labels.device)
+
+    out.scatter_(dim=1, index=labels.view(-1, 1), value=1.)
+    return out
 
 
 def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
@@ -36,9 +51,13 @@ def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
 
 
 def cls_wise_prob_acc(logits: np.ndarray, label: np.ndarray):
-    cls_num = label.shape[1]
     prediction = np.argmax(logits, axis=1)
-    gt = np.argmax(label, axis=1)
+    if label.shape.__len__() > 1:
+        cls_num = label.shape[1]
+        gt = np.argmax(label, axis=1)
+    else:
+        cls_num = int(np.max(label) + 1)
+        gt = label.astype(np.int32)
     acc = []
     for i in range(cls_num):
         ind = np.where(gt == i)[0]

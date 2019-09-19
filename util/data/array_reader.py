@@ -2,13 +2,14 @@ import tensorflow as tf
 
 
 class ArrayReader(object):
-    def __init__(self, set_name='1', batch_size=256):
+    def __init__(self, set_name='1', batch_size=256, pre_process=False):
         config = tf.ConfigProto(
             device_count={'GPU': 0}
         )
         self.sess = tf.Session(config=config)
         self.set_name = set_name
         self.batch_size = batch_size
+        self.pre_process = pre_process
         self.data = self._build_data()
 
     def _build_data(self):
