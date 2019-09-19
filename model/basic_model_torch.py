@@ -184,7 +184,7 @@ class BasicTrainable(object):
 
     # hook
 
-    def _hook(self, writer: SummaryWriter, step):
+    def _hook_s(self, writer: SummaryWriter, step):
         seen_data = self.reader.get_batch_tensor(self.reader.parts[1])
         seen_feat = seen_data[0]
         seen_label = seen_data[1]
@@ -205,9 +205,9 @@ class BasicTrainable(object):
 
             h_score = 2 * (seen_acc * unseen_acc) / (seen_acc + unseen_acc)
 
-            writer.add_scalar('hook/seen_acc', seen_acc, step)
-            writer.add_scalar('hook/unseen_acc', unseen_acc, step)
-            writer.add_scalar('hook/h_score', h_score, step)
+            writer.add_scalar('hook_s/seen_acc', seen_acc, step)
+            writer.add_scalar('hook_s/unseen_acc', unseen_acc, step)
+            writer.add_scalar('hook_s/h_score', h_score, step)
 
     def _hook_v(self, writer: SummaryWriter, step):
         seen_data = self.reader.get_batch_tensor(self.reader.parts[1])
@@ -230,9 +230,9 @@ class BasicTrainable(object):
 
             h_score = 2 * (seen_acc * unseen_acc) / (seen_acc + unseen_acc)
 
-            writer.add_scalar('hook/seen_acc', seen_acc, step)
-            writer.add_scalar('hook/unseen_acc', unseen_acc, step)
-            writer.add_scalar('hook/h_score', h_score, step)
+            writer.add_scalar('hook_v/seen_acc', seen_acc, step)
+            writer.add_scalar('hook_v/unseen_acc', unseen_acc, step)
+            writer.add_scalar('hook_v/h_score', h_score, step)
 
     def _hook_c(self, writer: SummaryWriter, step):
         seen_data = self.reader.get_batch_tensor(self.reader.parts[1])
@@ -251,9 +251,9 @@ class BasicTrainable(object):
 
             h_score = 2 * (seen_acc * unseen_acc) / (seen_acc + unseen_acc)
 
-            writer.add_scalar('hook/seen_acc', seen_acc, step)
-            writer.add_scalar('hook/unseen_acc', unseen_acc, step)
-            writer.add_scalar('hook/h_score', h_score, step)
+            writer.add_scalar('hook_c/seen_acc', seen_acc, step)
+            writer.add_scalar('hook_c/unseen_acc', unseen_acc, step)
+            writer.add_scalar('hook_c/h_score', h_score, step)
 
     def train(self, task='hehe1', max_iter=50000):
         scheduler = th.optim.lr_scheduler.MultiStepLR(self.inn.optimizer, milestones=[20, 40], gamma=0.1)
@@ -261,15 +261,16 @@ class BasicTrainable(object):
         writer_name = os.path.join(general.ROOT_PATH + 'result/{}/log/'.format(self.set_name), task + time_string)
         writer = SummaryWriter(writer_name)
 
-        for i in range(5000):
+        for i in range(15000):
             self._step(writer, i)
             if i % 50 == 0:
                 self._hook_v(writer, i)
+                self._hook_s(writer, i)
 
             if i % 1000 == 0 and i > 0:
                 # noinspection PyArgumentList
                 scheduler.step()
-        for i in range(5000, max_iter):
+        for i in range(15000, max_iter):
             self._cls(writer, i)
             if i % 50 == 0:
                 self._hook_c(writer, i)
@@ -277,7 +278,7 @@ class BasicTrainable(object):
 
 if __name__ == '__main__':
     settings = {'task_name': 's_n_cls',
-                'set_name': 'CUB',
+                'set_name': 'AWA1',
                 'lamb': 1.,
                 'lr': 5e-4,
                 'depth': 10,
