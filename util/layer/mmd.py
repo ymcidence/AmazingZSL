@@ -1,4 +1,6 @@
 import tensorflow as tf
+import torch
+import numpy as np
 
 SCALE = 1.
 
@@ -118,3 +120,34 @@ def category_mmd(tensor_a: tf.Tensor, tensor_b: tf.Tensor, label_a: tf.Tensor, l
         rslt += kernelized_1 + kernelized_2 - 2 * kernelized_3
 
     return rslt
+
+
+def mmd_matrix_multiscale(x, y, widths_exponents):
+    xx, yy, xy = torch.mm(x, x.t()), torch.mm(y, y.t()), torch.mm(x, y.t())
+
+    rx = (xx.diag().unsqueeze(0).expand_as(xx))
+    ry = (yy.diag().unsqueeze(0).expand_as(yy))
+
+    dxx = torch.clamp(rx.t() + rx - 2. * xx, 0, np.inf)
+    dyy = torch.clamp(ry.t() + ry - 2. * yy, 0, np.inf)
+    dxy = torch.clamp(rx.t() + ry - 2. * xy, 0, np.inf)
+
+    XX, YY, XY = (torch.zeros(xx.shape).to('cuda'),
+                  torch.zeros(xx.shape).to('cuda'),
+                  torch.zeros(xx.shape).to('cuda'))
+
+    for C, a in widths_exponents:
+        XX += C ** a * ((C + dxx) / a) ** -a
+        YY += C ** a * ((C + dyy) / a) ** -a
+        XY += C ** a * ((C + dxy) / a) ** -a
+
+    return XX + YY - 2. * XY
+
+
+def l2_dist_matrix(x, y):
+    xx, yy, xy = torch.mm(x, x.t()), torch.mm(y, y.t()), torch.mm(x, y.t())
+
+    rx = (xx.diag().unsqueeze(0).expand_as(xx))
+    ry = (yy.diag().unsqueeze(0).expand_as(yy))
+
+    return torch.clamp(rx.t() + ry - 2. * xy, 0, np.inf)

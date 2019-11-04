@@ -1,13 +1,17 @@
 import os
 import numpy as np
 import tensorflow as tf
+import torch as th
+import general
 from util.data import set_profiles
+from util.data.array_reader import ArrayReader
+from sklearn.preprocessing import MinMaxScaler as Scaler
 
 
 class ZSLMeta(object):
     def __init__(self, **kwargs):
         self.set_name = kwargs.get('set_name', 'AWA1')
-        self.meta_name = os.path.join('./data', self.set_name, 'meta_info.npy')
+        self.meta_name = os.path.join(general.ROOT_PATH + 'data', self.set_name, 'meta_info.npy')
         self.data = self._load_data()
         self._iterator = self.data.make_one_shot_iterator()
 
@@ -56,7 +60,7 @@ class ZSLRecord(object):
             _label_emb = tf.cast(features['label_emb'], tf.float32)
             return _id, _feat, _label, _label_emb
 
-        record_name = os.path.join('./data', self.set_name, self.part_name + '.tfrecords')
+        record_name = os.path.join(general.ROOT_PATH + 'data', self.set_name, self.part_name + '.tfrecords')
         data = tf.data.TFRecordDataset(record_name).map(data_parser, num_parallel_calls=50).prefetch(self.batch_size)
         data = data.cache().repeat().shuffle(self.set_size).batch(self.batch_size)
 
@@ -140,6 +144,46 @@ class Dataset(object):
         return self.unseen_data.handle
 
 
+class ZSLArrayReader(ArrayReader):
+    def __init__(self, set_name='AWA1', batch_size=256, **kwargs):
+        super().__init__(set_name, batch_size, **kwargs)
+        self.content = ['feat', 'label', 'label_emb', 's_cls', 'u_cls', 'cls_emb', 's_cls_emb', 'u_cls_emb']
+        self.parts = ['training', 'seen', 'unseen']
+        self.scaler = Scaler()
+        self._init_scaler()
+
+    def _build_data(self):
+        return Dataset(set_name=self.set_name, sess=self.sess, batch_size=self.batch_size)
+
+    def get_batch_tensor(self, part='training'):
+        batch = self.get_batch(part)
+        feat = []
+        for i in self.content:
+            if self.pre_process and i == 'feat':
+                this_feat = self._pre_process(batch[i])
+                f = th.tensor(this_feat, dtype=th.float32).cuda()
+            else:
+                f = th.tensor(batch[i], dtype=th.float32).cuda()
+
+            if i.find('_emb') > 0:
+                min_v = set_profiles.ATTR_SCOPE[self.set_name][0]
+                max_v = set_profiles.ATTR_SCOPE[self.set_name][1]
+                f = ((f - min_v) / (max_v - min_v)) * 1
+            feat.append(f)
+
+        return feat
+
+    def _pre_process(self, feat: np.ndarray):
+        return self.scaler.transform(feat)
+
+    def _init_scaler(self):
+        print('******INITIALIZING DATA******')
+        for i in range(set_profiles.SET_SIZE[self.set_name][0] // self.batch_size):
+            print(i)
+            feat = self.get_batch()['feat']
+            self.scaler.fit(feat)
+
+
 # noinspection PyUnusedLocal
 def test_0():
     dataset = ZSLMeta(set_name='AWA1')
@@ -167,5 +211,11 @@ def test_2():
     print('hehe')
 
 
+def test_3():
+    reader = ZSLArrayReader()
+    batch = reader.get_batch()
+    print(batch)
+
+
 if __name__ == '__main__':
-    test_2()
+    test_0()
