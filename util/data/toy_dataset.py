@@ -10,7 +10,7 @@ class ToyReader(ArrayReader):
         self.content = ['feat', 'label', 'label_emb', 's_cls', 'u_cls', 'cls_emb', 's_cls_emb', 'u_cls_emb']
         self.parts = ['training', 'seen', 'unseen']
         assert self.batch_size % 12 == 0
-        self.seen_emb = np.asarray([[-1, 1], [-1, -1], [1, -1]])
+        self.seen_emb = np.asarray([[0, 1], [0, 0], [1, 0]])
         self.unseen_emb = np.asarray([[1, 1]])
         self.seen_cls_num = self.seen_emb.shape[0]
         self.unseen_cls_num = self.unseen_emb.shape[0]
@@ -31,8 +31,8 @@ class ToyReader(ArrayReader):
         gaussian_sample_1 = np.random.randn(self.batch_size, 2) / 3
         gaussian_sample_2 = np.random.randn(self.batch_size, 2) / 3
 
-        seen_samples = seen_centers + gaussian_sample_1
-        unseen_samples = unseen_centers + gaussian_sample_2
+        seen_samples = seen_centers * 2 - 1 + gaussian_sample_1
+        unseen_samples = unseen_centers * 2 - 1 + gaussian_sample_2
 
         padding = np.zeros([self.batch_size, 2], np.float32)
         seen_samples = np.concatenate([seen_samples, padding], axis=1)

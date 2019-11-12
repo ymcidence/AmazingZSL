@@ -11,6 +11,7 @@ from util.data.dataset import ZSLArrayReader as Reader
 from util.layer.mmd import mmd_matrix_multiscale
 from util.eval import zsl_acc
 from time import gmtime, strftime
+from scipy import io as sio
 
 
 class BasicModule(nn.Module):
@@ -238,10 +239,12 @@ class BasicTrainable(object):
         seen_data = self.reader.get_batch_tensor(self.reader.parts[1])
         seen_feat = seen_data[0]
         seen_label = seen_data[1]
+        seen_le = seen_data[2]
 
         unseen_data = self.reader.get_batch_tensor(self.reader.parts[2])
         unseen_feat = unseen_data[0]
         unseen_label = unseen_data[1]
+        unseen_le = unseen_data[2]
         with th.no_grad():
             seen_pred = self.cls(x=seen_feat).cpu().numpy()
             unseen_pred = self.cls(x=unseen_feat).cpu().numpy()
@@ -249,11 +252,22 @@ class BasicTrainable(object):
             seen_acc = zsl_acc.cls_wise_prob_acc(seen_pred, seen_label.cpu().numpy())
             unseen_acc = zsl_acc.cls_wise_prob_acc(unseen_pred, unseen_label.cpu().numpy())
 
+            seen_gen = self.generation(seen_feat, seen_le).cpu().numpy()
+            unseen_gen = self.generation(unseen_feat, unseen_le).cpu().numpy()
+
             h_score = 2 * (seen_acc * unseen_acc) / (seen_acc + unseen_acc)
 
             writer.add_scalar('hook_c/seen_acc', seen_acc, step)
             writer.add_scalar('hook_c/unseen_acc', unseen_acc, step)
             writer.add_scalar('hook_c/h_score', h_score, step)
+
+        return seen_gen, unseen_gen, unseen_pred, seen_label.cpu().numpy(), unseen_label.cpu().numpy()
+
+    def generation(self, x, emb):
+        rand_z = th.randn_like(x[:, self.emb_size:]).cuda()
+        rand_yz = th.cat([emb, rand_z], dim=1)
+        gen, _ = self.inn(x=rand_yz, reverse=True)
+        return gen
 
     def train(self, task='hehe1', max_iter=50000):
         scheduler = th.optim.lr_scheduler.MultiStepLR(self.inn.optimizer, milestones=[20, 40], gamma=0.1)
@@ -261,7 +275,7 @@ class BasicTrainable(object):
         writer_name = os.path.join(general.ROOT_PATH + 'result/{}/log/'.format(self.set_name), task + time_string)
         writer = SummaryWriter(writer_name)
 
-        for i in range(15000):
+        for i in range(11000):
             self._step(writer, i)
             if i % 50 == 0:
                 self._hook_v(writer, i)
@@ -270,10 +284,32 @@ class BasicTrainable(object):
             if i % 1000 == 0 and i > 0:
                 # noinspection PyArgumentList
                 scheduler.step()
-        for i in range(15000, max_iter):
+                th.save(self.inn.state_dict(), general.ROOT_PATH + 'result/{}/model/hehe.pt'.format(self.set_name))
+
+        s_gen = []
+        u_gen = []
+        s_label = []
+        u_label = []
+        pred = []
+        for i in range(11000, 12000):
             self._cls(writer, i)
             if i % 50 == 0:
-                self._hook_c(writer, i)
+                outs = self._hook_c(writer, i)
+                s_gen.append(outs[0])
+                u_gen.append(outs[1])
+                pred.append(outs[2])
+                s_label.append(outs[3])
+                u_label.append(outs[4])
+
+        s_gen = np.concatenate(s_gen, axis=0)
+        u_gen = np.concatenate(u_gen, axis=0)
+        pred = np.concatenate(pred, axis=0)
+        s_label = np.concatenate(s_label, axis=0)
+        u_label = np.concatenate(u_label, axis=0)
+
+        save_dict = {'s_gen': s_gen, 'u_gen': u_gen, 'pred': pred, 's_label': s_label, 'u_label': u_label}
+
+        sio.savemat(os.path.join(general.ROOT_PATH + 'result/{}/hehe.mat'.format(self.set_name)), save_dict)
 
 
 if __name__ == '__main__':
