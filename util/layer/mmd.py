@@ -128,9 +128,9 @@ def mmd_matrix_multiscale(x, y, widths_exponents):
     rx = (xx.diag().unsqueeze(0).expand_as(xx))
     ry = (yy.diag().unsqueeze(0).expand_as(yy))
 
-    dxx = torch.clamp(rx.t() + rx - 2. * xx, 0, np.inf)
-    dyy = torch.clamp(ry.t() + ry - 2. * yy, 0, np.inf)
-    dxy = torch.clamp(rx.t() + ry - 2. * xy, 0, np.inf)
+    dxx = torch.clamp(rx.t() + rx - 2. * xx, 0, 1e8)
+    dyy = torch.clamp(ry.t() + ry - 2. * yy, 0, 1e8)
+    dxy = torch.clamp(rx.t() + ry - 2. * xy, 0, 1e8)
 
     XX, YY, XY = (torch.zeros(xx.shape).to('cuda'),
                   torch.zeros(xx.shape).to('cuda'),

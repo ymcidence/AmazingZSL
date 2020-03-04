@@ -2,7 +2,7 @@ import tensorflow as tf
 
 
 class ArrayReader(object):
-    def __init__(self, set_name='1', batch_size=256, pre_process=False):
+    def __init__(self, set_name='1', batch_size=256, pre_process=False, **kwargs):
         config = tf.ConfigProto(
             device_count={'GPU': 0}
         )

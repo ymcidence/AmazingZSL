@@ -1,6 +1,7 @@
 import numpy as np
-from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.metrics.pairwise import euclidean_distances, cosine_similarity
 import torch as th
+
 
 def one_hot(labels, out_dim=10):
     """
@@ -17,16 +18,19 @@ def one_hot(labels, out_dim=10):
     return out
 
 
-def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray):
+def cls_wise_acc(img_feat: np.ndarray, label: np.ndarray, emb: np.ndarray, type='euclidean'):
     """
 
     :param img_feat: [N D]
     :param label: [N C]
     :param emb: [C D]
+    :param type:
     :return:
     """
-
-    distances = euclidean_distances(img_feat, emb)
+    if type == 'euclidean':
+        distances = euclidean_distances(img_feat, emb)
+    else:
+        distances = cosine_similarity(img_feat, emb) * -1
     prediction = np.argmin(distances, axis=1)
     if label.shape.__len__() > 1:
         cls_num = label.shape[1]

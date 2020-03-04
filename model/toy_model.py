@@ -127,7 +127,7 @@ class ToyTrainable(object):
 
         cls_loss = th.mean((y_hat - label_emb) ** 2)
         jac_loss = -1 * th.mean(yz_det) / self.feat_size
-        z_loss = th.mean(z_hat ** 2) / 2
+        z_loss = th.mean(z_hat ** 2)
 
         rand_y = cls_emb[[3] * self.batch_size, :]
         rand_z = th.randn_like(z_hat).cuda()
@@ -141,9 +141,9 @@ class ToyTrainable(object):
 
         x_loss = th.mean(mmd_matrix_multiscale(feat, x_hat_2, self.mmd_weight))
 
-        x_mmd = 0 * th.mean(mmd_matrix_multiscale(feat, x_hat, self.mmd_weight))
+        x_mmd = -2 * th.mean(mmd_matrix_multiscale(feat, x_hat, self.mmd_weight))
 
-        loss = 10 * cls_loss + jac_loss + z_loss + x_mmd + 0 * x_loss
+        loss = 2 * cls_loss + jac_loss + z_loss + x_mmd + 0 * x_loss
 
         loss.backward()
         th.nn.utils.clip_grad_norm_(self.inn.trainable_parameters, 10.)
@@ -236,7 +236,7 @@ class ToyTrainable(object):
 
 
 if __name__ == '__main__':
-    settings = {'task_name': 'toy_under2',
+    settings = {'task_name': 'toy_over_new',
                 'set_name': 'Toy',
                 'lamb': 1.,
                 'lr': 5e-3,
