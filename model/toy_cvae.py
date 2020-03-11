@@ -128,7 +128,7 @@ class ToyCVAETrainable(object):
 
         # u_hat = self.model(u_cz)
 
-        loss = cvae_loss(x_hat, s_feat, mu, var) - 0 * th.mean(mmd_matrix_multiscale(s_feat, u_hat, self.mmd_weight))
+        loss = cvae_loss(x_hat, s_feat, mu, var) - 0.1 * th.mean(mmd_matrix_multiscale(s_feat, u_hat, self.mmd_weight))
         loss.backward()
         self.model.opt.step()
         self.model.opt.zero_grad()
@@ -214,13 +214,13 @@ class ToyCVAETrainable(object):
 
 
 if __name__ == '__main__':
-    settings = {'task_name': 'no_mmd',
+    settings = {'task_name': 'small_mmd',
                 'set_name': 'Toy',
                 'lamb': 1.,
                 'lr': 5e-3,
                 'depth': 3,
                 'mmd_weight': [(0.1, 1), (0.2, 1), (1.5, 1), (3.0, 1), (5.0, 1), (10.0, 1)],
                 'batch_size': 128 * 3,
-                'max_iter': 20000}
+                'max_iter': 10000}
     model = ToyCVAETrainable()
     model.train(task=settings['task_name'], max_iter=settings['max_iter'])

@@ -1,7 +1,7 @@
 import numpy as np
 import torch as th
 from util.data.array_reader import ArrayReader
-
+DEVICE = th.device("cuda" if th.cuda.is_available()  else "cpu")
 
 class ToyReader(ArrayReader):
 
@@ -59,10 +59,7 @@ class ToyReader(ArrayReader):
                          self.seen_emb,
                          self.unseen_emb]
 
-        feat = []
-        for i in feed_list:
-            f = th.tensor(i, dtype=th.float32).cuda()
-            feat.append(f)
+        feat = [th.tensor(i, dtype=th.float32).to(DEVICE) for i in feed_list]
 
         return feat
 
